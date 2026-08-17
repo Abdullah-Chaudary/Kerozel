@@ -1991,7 +1991,10 @@ export default function CarouselPage() {
   return (
     <CanvasSizeContext.Provider value={{ w: canvasW, h: canvasH }}>
     <DesignContext.Provider value={customData}>
-    <div suppressHydrationWarning style={{ minHeight: "100vh", padding: 32 }}>
+    <div
+      suppressHydrationWarning
+      style={{ minHeight: "100vh", padding: "32px 24px", maxWidth: 1320, margin: "0 auto" }}
+    >
       {/* Customizer panel */}
       {showCustomizer && (
         <Customizer data={customData} onChange={setCustomData} />

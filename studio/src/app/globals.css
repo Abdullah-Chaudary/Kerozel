@@ -3,6 +3,7 @@
 :root {
   --font-inter: "Inter", system-ui, -apple-system, sans-serif;
   --font-playfair: "Playfair Display", Georgia, serif;
+  color-scheme: dark;
 }
 
 body {
@@ -12,6 +13,54 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+/* Dark native controls: color pickers, selects, scrollbars */
+select option {
+  background: #1c1c1e;
+  color: #eee;
+}
+
+/* Polished range sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: #2c2c30;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1);
+}
+input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.2);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+/* Native color inputs — remove default borders for a cleaner swatch */
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  padding: 0;
 }
 
 /* Toolbar buttons — transitions + press scale */
