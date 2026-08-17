@@ -9,7 +9,7 @@ description: >
   Triggers: threads carousel, instagram carousel, linkedin carousel, tiktok carousel, карусель, slides, carousel images, presentation deck, presentation pdf, render carousel, export carousel.
 ---
 
-# Threads Carousel Generator
+# Kerozel — Carousel Generator
 
 Converts a text post into a set of visual carousel slides for Threads, Instagram, LinkedIn, TikTok, Stories, YouTube, or a standalone presentation deck. Composable design system with three independent style axes (font × color × purpose) and 12 slide types.
 

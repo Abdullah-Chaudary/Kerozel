@@ -1,4 +1,4 @@
-# threads-carousel-claude-skill
+# Kerozel
 
 A [Claude Code](https://claude.com/claude-code) skill that converts text posts into visual carousel images for **Threads, Instagram, LinkedIn, TikTok, and Stories**.
 
