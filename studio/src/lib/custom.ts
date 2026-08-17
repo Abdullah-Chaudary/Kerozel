@@ -8,16 +8,20 @@
 import type {
   BgKind,
   BlendMode,
+  BgType,
   CustomData,
   CustomFont,
   CustomSurface,
   DecorLayer,
+  FormatId,
   LogoConfig,
+  PurposeId,
   StylePreset,
   TypographyConfig,
 } from "./types";
 
 export const STORAGE_KEY = "kerozel.custom.v1";
+export const PRESETS_KEY = "kerozel.presets.v1";
 
 // ---- defaults ----
 
@@ -79,6 +83,47 @@ export function loadCustomData(): CustomData {
 export function saveCustomData(data: CustomData): void {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // storage full or unavailable — ignore
+  }
+}
+
+// ============================================================
+// Named presets — the full state (custom assets + active axes)
+// ============================================================
+
+export interface PresetAxes {
+  fontId: string;
+  surfaceId: string;
+  accentId: string;
+  purposeId: PurposeId;
+  formatId: FormatId;
+  bgType: BgType;
+}
+
+export interface SavedPreset {
+  id: string;
+  name: string;
+  savedAt: number;
+  data: CustomData;
+  axes: PresetAxes;
+}
+
+export function loadPresets(): SavedPreset[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(PRESETS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as SavedPreset[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function savePresets(list: SavedPreset[]): void {
+  try {
+    window.localStorage.setItem(PRESETS_KEY, JSON.stringify(list));
   } catch {
     // storage full or unavailable — ignore
   }

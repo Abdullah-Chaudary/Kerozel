@@ -11,7 +11,8 @@ import type {
   DecorLayer,
   TextAlign,
 } from "../lib/types";
-import { BLEND_LABELS, BLEND_MODES, defaultTypo, uid } from "../lib/custom";
+import { BLEND_LABELS, BLEND_MODES, defaultTypo, uid, loadPresets, savePresets } from "../lib/custom";
+import type { PresetAxes, SavedPreset } from "../lib/custom";
 import GradientEditor, { ColorField, Slider } from "./GradientEditor";
 
 // ============================================================
@@ -201,11 +202,18 @@ const DECOR_LABELS: Record<string, string> = {
 export default function Customizer({
   data,
   onChange,
+  axes,
+  onApply,
 }: {
   data: CustomData;
   onChange: (d: CustomData) => void;
+  axes: PresetAxes;
+  onApply: (p: SavedPreset) => void;
 }) {
   const [addingSurface, setAddingSurface] = useState<"solid" | "gradient" | "image" | null>(null);
+  const [presets, setPresets] = useState<SavedPreset[]>(() => loadPresets());
+  const [presetName, setPresetName] = useState("");
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [surfaceName, setSurfaceName] = useState("");
   const [solidColor, setSolidColor] = useState("#1a1a2e");
   const [gradCss, setGradCss] = useState("linear-gradient(135deg, #6366F1 0%, #EC4899 50%, #F59E0B 100%)");
@@ -297,6 +305,58 @@ export default function Customizer({
   const patchDecor = (id: string, patch: Partial<DecorLayer>) =>
     updateDecors(data.decors.map((d) => (d.id === id ? { ...d, ...patch } : d)));
 
+  // ---- presets ----
+
+  const persistPresets = (next: SavedPreset[]) => {
+    setPresets(next);
+    savePresets(next);
+  };
+
+  const saveCurrentPreset = () => {
+    const name = presetName.trim() || `Preset ${presets.length + 1}`;
+    const preset: SavedPreset = {
+      id: uid(),
+      name,
+      savedAt: Date.now(),
+      data,
+      axes,
+    };
+    persistPresets([preset, ...presets]);
+    setPresetName("");
+  };
+
+  const deletePreset = (id: string) => persistPresets(presets.filter((p) => p.id !== id));
+
+  const downloadPresets = () => {
+    if (presets.length === 0) return;
+    const blob = new Blob([JSON.stringify(presets, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "kerozel-presets.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importPresets = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (!Array.isArray(parsed)) throw new Error("not an array");
+        const incoming = parsed as SavedPreset[];
+        const byId = new Map(presets.map((p) => [p.id, p]));
+        incoming.forEach((p) => {
+          if (p && typeof p.id === "string" && p.data && p.axes) byId.set(p.id, p);
+        });
+        persistPresets([...byId.values()]);
+      } catch {
+        // ignore malformed files
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div
       style={{
@@ -321,6 +381,74 @@ export default function Customizer({
           alignItems: "start",
         }}
       >
+        {/* ---------- Presets ---------- */}
+        <Section
+          wide
+          title={`Presets · ${presets.length}`}
+          right={
+            <div style={{ display: "flex", gap: 4 }}>
+              <button onClick={() => importInputRef.current?.click()} style={{ ...btn, padding: "4px 10px", fontSize: 11 }}>
+                Import
+              </button>
+              <button onClick={downloadPresets} style={{ ...btn, padding: "4px 10px", fontSize: 11 }} disabled={presets.length === 0}>
+                Download
+              </button>
+            </div>
+          }
+        >
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) importPresets(f);
+              e.target.value = "";
+            }}
+          />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              type="text"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder={'Preset name (e.g. "Brand blue")'}
+              style={{ ...inp, flex: 1, minWidth: 220 }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveCurrentPreset();
+              }}
+            />
+            <button onClick={saveCurrentPreset} style={{ ...btn, background: "#6366F1", color: "#fff", fontWeight: 600 }}>
+              Save current preset
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: "#777", lineHeight: 1.5 }}>
+            A preset captures everything — custom fonts, backgrounds, accents, decor layers, logo, typography, and the currently selected font / surface / accent / mode / format / decor.
+          </div>
+          {presets.length === 0 && (
+            <div style={{ fontSize: 11, color: "#777" }}>No saved presets yet — name one above and hit “Save current preset”.</div>
+          )}
+          {presets.map((p) => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid #26262a", borderRadius: 10, padding: "8px 12px" }}>
+              <span style={{ flex: 1, fontSize: 12, color: "#eee", minWidth: 0 }}>
+                {p.name}
+                <span style={{ fontSize: 10, color: "#6a6a72", marginLeft: 8 }}>
+                  {new Date(p.savedAt).toLocaleString()}
+                </span>
+              </span>
+              <button
+                onClick={() => onApply(p)}
+                style={{ ...btn, padding: "4px 10px", fontSize: 11, background: "#22C55E", borderColor: "#22C55E", color: "#fff" }}
+              >
+                Load
+              </button>
+              <button onClick={() => deletePreset(p.id)} style={{ ...btn, padding: "4px 10px", fontSize: 11, color: "#f87171" }}>
+                Delete
+              </button>
+            </div>
+          ))}
+        </Section>
+
         {/* ---------- Typography ---------- */}
         <Section
           title="Typography"

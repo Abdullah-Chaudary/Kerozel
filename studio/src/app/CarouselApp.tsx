@@ -10,6 +10,7 @@ import { FONT_STYLES, SURFACES, ACCENTS, composePreset, FORMAT_PRESETS } from ".
 import { SLIDES, DEFAULT_FONT, DEFAULT_SURFACE, DEFAULT_ACCENT, DEFAULT_PURPOSE, DEFAULT_BG, DEFAULT_FORMAT } from "../slides";
 import Customizer from "../components/Customizer";
 import { loadCustomData, saveCustomData, registerFontFace, applyTypography, defaultData } from "../lib/custom";
+import type { PresetAxes, SavedPreset } from "../lib/custom";
 
 const CANVAS_W = FORMAT_PRESETS[DEFAULT_FORMAT].w;
 const CANVAS_H = FORMAT_PRESETS[DEFAULT_FORMAT].h;
@@ -1900,6 +1901,18 @@ export default function CarouselPage() {
   const accent = accentOptions.find((a) => a.id === accentId) ?? ACCENTS[DEFAULT_ACCENT];
   const preset = applyTypography(composePreset(font, surface, accent, purposeId), customData.typo);
 
+  const axes: PresetAxes = { fontId, surfaceId, accentId, purposeId, formatId, bgType };
+
+  const applyPreset = useCallback((p: SavedPreset) => {
+    setCustomData(p.data);
+    setFontId(p.axes.fontId);
+    setSurfaceId(p.axes.surfaceId);
+    setAccentId(p.axes.accentId);
+    setPurposeId(p.axes.purposeId);
+    setFormatId(p.axes.formatId);
+    setBgType(p.axes.bgType);
+  }, []);
+
   const captureSlide = useCallback(
     async (index: number): Promise<string | null> => {
       const el = offscreenRefs.current[index];
@@ -1997,7 +2010,7 @@ export default function CarouselPage() {
     >
       {/* Customizer panel */}
       {showCustomizer && (
-        <Customizer data={customData} onChange={setCustomData} />
+        <Customizer data={customData} onChange={setCustomData} axes={axes} onApply={applyPreset} />
       )}
       {/* Toolbar */}
       <div style={{ marginBottom: 32 }}>
