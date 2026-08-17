@@ -1,16 +1,42 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect, ReactNode, createContext, useContext } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo, useId, ReactNode, createContext, useContext } from "react";
 import { toPng, toJpeg } from "html-to-image";
-import type { SlideData, BgType, StylePreset, FontId, SurfaceId, AccentId, PurposeId, FormatId } from "../lib/types";
+import type {
+  SlideData, BgType, StylePreset, FontId, FontStyle, SurfaceId, Surface, AccentId, Accent,
+  PurposeId, FormatId, CustomData, CustomFont, CustomSurface, CustomAccent, DecorLayer, BgImage, BlendMode,
+} from "../lib/types";
 import { FONT_STYLES, SURFACES, ACCENTS, composePreset, FORMAT_PRESETS } from "../lib/presets";
 import { SLIDES, DEFAULT_FONT, DEFAULT_SURFACE, DEFAULT_ACCENT, DEFAULT_PURPOSE, DEFAULT_BG, DEFAULT_FORMAT } from "../slides";
+import Customizer from "../components/Customizer";
+import { loadCustomData, saveCustomData, registerFontFace, applyTypography, defaultData } from "../lib/custom";
 
 const CANVAS_W = FORMAT_PRESETS[DEFAULT_FORMAT].w;
 const CANVAS_H = FORMAT_PRESETS[DEFAULT_FORMAT].h;
 
 const CanvasSizeContext = createContext({ w: CANVAS_W, h: CANVAS_H });
 function useCanvasSize() { return useContext(CanvasSizeContext); }
+
+const DesignContext = createContext<CustomData>(defaultData());
+function useDesign() { return useContext(DesignContext); }
+
+/** Resolve the CSS background for a slide container from a composed preset. */
+function bgStyle(preset: StylePreset): React.CSSProperties {
+  if (preset.bgImage) {
+    const s: React.CSSProperties = {
+      backgroundImage: `url(${preset.bgImage.url})`,
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundColor: preset.bgImage.tint ?? "transparent",
+    };
+    if (preset.bgImage.blend && preset.bgImage.blend !== "normal") {
+      s.backgroundBlendMode = preset.bgImage.blend;
+    }
+    return s;
+  }
+  if (preset.bgGradient) return { background: preset.bgGradient };
+  return { background: preset.bg };
+}
 
 // ============================================================
 // ADAPTIVE FONT SIZE
@@ -136,14 +162,16 @@ const BLOB_ZONES = [
 function SlideDecorations({
   slideIndex,
   preset,
+  colorOverride,
 }: {
   slideIndex: number;
   preset: StylePreset;
+  colorOverride?: string;
 }) {
   const { w: CANVAS_W, h: CANVAS_H } = useCanvasSize();
   const rng = seededRandom(slideIndex * 7919 + 42);
   const blobCount = 1 + Math.floor(rng() * 2); // 1-2 blobs
-  const { r, g, b } = hexToRgb(preset.accentColor);
+  const { r, g, b } = hexToRgb(colorOverride ?? preset.accentColor);
 
   const blobs: ReactNode[] = [];
 
@@ -192,9 +220,10 @@ function SlideDecorations({
 // BACKGROUND DECORATIONS (grid / noise / bignumber / glow / lines)
 // ============================================================
 
-function GridDecoration({ preset }: { preset: StylePreset }) {
+function GridDecoration({ preset, colorOverride }: { preset: StylePreset; colorOverride?: string }) {
   const { w: CANVAS_W, h: CANVAS_H } = useCanvasSize();
-  const { r, g, b } = hexToRgb(preset.accentColor);
+  const uid = useId();
+  const { r, g, b } = hexToRgb(colorOverride ?? preset.accentColor);
   return (
     <svg
       width={CANVAS_W}
@@ -202,18 +231,19 @@ function GridDecoration({ preset }: { preset: StylePreset }) {
       style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
     >
       <defs>
-        <pattern id="dotgrid" width="60" height="60" patternUnits="userSpaceOnUse">
+        <pattern id={uid} width="60" height="60" patternUnits="userSpaceOnUse">
           <circle cx="30" cy="30" r="2.5" fill={`rgba(${r},${g},${b},0.14)`} />
         </pattern>
       </defs>
-      <rect width={CANVAS_W} height={CANVAS_H} fill="url(#dotgrid)" />
+      <rect width={CANVAS_W} height={CANVAS_H} fill={`url(#${uid})`} />
     </svg>
   );
 }
 
-function LinesDecoration({ preset }: { preset: StylePreset }) {
+function LinesDecoration({ preset, colorOverride }: { preset: StylePreset; colorOverride?: string }) {
   const { w: CANVAS_W, h: CANVAS_H } = useCanvasSize();
-  const { r, g, b } = hexToRgb(preset.accentColor);
+  const uid = useId();
+  const { r, g, b } = hexToRgb(colorOverride ?? preset.accentColor);
   return (
     <svg
       width={CANVAS_W}
@@ -222,7 +252,7 @@ function LinesDecoration({ preset }: { preset: StylePreset }) {
     >
       <defs>
         <pattern
-          id="diaglines"
+          id={uid}
           width="64"
           height="64"
           patternUnits="userSpaceOnUse"
@@ -238,14 +268,15 @@ function LinesDecoration({ preset }: { preset: StylePreset }) {
           />
         </pattern>
       </defs>
-      <rect width={CANVAS_W} height={CANVAS_H} fill="url(#diaglines)" />
+      <rect width={CANVAS_W} height={CANVAS_H} fill={`url(#${uid})`} />
     </svg>
   );
 }
 
-function PaperDecoration({ preset }: { preset: StylePreset }) {
+function PaperDecoration({ preset, colorOverride }: { preset: StylePreset; colorOverride?: string }) {
   const { w: CANVAS_W, h: CANVAS_H } = useCanvasSize();
-  const { r, g, b } = hexToRgb(preset.textColor);
+  const uid = useId();
+  const { r, g, b } = hexToRgb(colorOverride ?? preset.textColor);
   const lineColor = `rgba(${r},${g},${b},0.12)`;
   const marginColor = `rgba(${r},${g},${b},0.22)`;
   return (
@@ -255,7 +286,7 @@ function PaperDecoration({ preset }: { preset: StylePreset }) {
       style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
     >
       <defs>
-        <pattern id="ruledlines" width={CANVAS_W} height="64" patternUnits="userSpaceOnUse">
+        <pattern id={uid} width={CANVAS_W} height="64" patternUnits="userSpaceOnUse">
           <line
             x1="0"
             y1="64"
@@ -266,7 +297,7 @@ function PaperDecoration({ preset }: { preset: StylePreset }) {
           />
         </pattern>
       </defs>
-      <rect width={CANVAS_W} height={CANVAS_H} fill="url(#ruledlines)" />
+      <rect width={CANVAS_W} height={CANVAS_H} fill={`url(#${uid})`} />
       <line
         x1="140"
         y1="0"
@@ -281,7 +312,7 @@ function PaperDecoration({ preset }: { preset: StylePreset }) {
 
 function NoiseDecoration({ slideIndex }: { slideIndex: number }) {
   const { w: CANVAS_W, h: CANVAS_H } = useCanvasSize();
-  const id = `noise-${slideIndex}`;
+  const uid = useId();
   return (
     <svg
       width={CANVAS_W}
@@ -295,7 +326,7 @@ function NoiseDecoration({ slideIndex }: { slideIndex: number }) {
         opacity: 0.6,
       }}
     >
-      <filter id={id}>
+      <filter id={uid}>
         <feTurbulence
           type="fractalNoise"
           baseFrequency="0.85"
@@ -304,7 +335,7 @@ function NoiseDecoration({ slideIndex }: { slideIndex: number }) {
         />
         <feColorMatrix type="saturate" values="0" />
       </filter>
-      <rect width={CANVAS_W} height={CANVAS_H} filter={`url(#${id})`} />
+      <rect width={CANVAS_W} height={CANVAS_H} filter={`url(#${uid})`} />
     </svg>
   );
 }
@@ -312,11 +343,13 @@ function NoiseDecoration({ slideIndex }: { slideIndex: number }) {
 function BigNumberDecoration({
   slideIndex,
   preset,
+  colorOverride,
 }: {
   slideIndex: number;
   preset: StylePreset;
+  colorOverride?: string;
 }) {
-  const { r, g, b } = hexToRgb(preset.accentColor);
+  const { r, g, b } = hexToRgb(colorOverride ?? preset.accentColor);
   return (
     <div
       style={{
@@ -341,11 +374,13 @@ function BigNumberDecoration({
 function GlowDecoration({
   slideIndex,
   preset,
+  colorOverride,
 }: {
   slideIndex: number;
   preset: StylePreset;
+  colorOverride?: string;
 }) {
-  const { r, g, b } = hexToRgb(preset.accentColor);
+  const { r, g, b } = hexToRgb(colorOverride ?? preset.accentColor);
   // alternate corners by slide index
   const positions = [
     { top: -200, right: -200 },
@@ -369,6 +404,103 @@ function GlowDecoration({
   );
 }
 
+function renderBuiltInDecoration(
+  bgType: BgType,
+  slideIndex: number,
+  preset: StylePreset,
+  colorOverride?: string
+): ReactNode {
+  switch (bgType) {
+    case "blobs":
+      return <SlideDecorations slideIndex={slideIndex} preset={preset} colorOverride={colorOverride} />;
+    case "grid":
+      return <GridDecoration preset={preset} colorOverride={colorOverride} />;
+    case "lines":
+      return <LinesDecoration preset={preset} colorOverride={colorOverride} />;
+    case "paper":
+      return <PaperDecoration preset={preset} colorOverride={colorOverride} />;
+    case "noise":
+      return <NoiseDecoration slideIndex={slideIndex} />;
+    case "bignumber":
+      return <BigNumberDecoration slideIndex={slideIndex} preset={preset} colorOverride={colorOverride} />;
+    case "glow":
+      return <GlowDecoration slideIndex={slideIndex} preset={preset} colorOverride={colorOverride} />;
+    case "none":
+    default:
+      return null;
+  }
+}
+
+/** Wrapper that applies a decor layer's blend / opacity / size to a full-canvas decoration. */
+function DecorWrapper({ layer, children }: { layer: DecorLayer; children: ReactNode }) {
+  const { w: CANVAS_W, h: CANVAS_H } = useCanvasSize();
+  const style: React.CSSProperties = {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: CANVAS_W,
+    height: CANVAS_H,
+    pointerEvents: "none",
+  };
+  if (layer.blend !== "normal") style.mixBlendMode = layer.blend;
+  if (layer.opacity !== 1) style.opacity = layer.opacity;
+  if (layer.size !== 1) {
+    style.transform = `scale(${layer.size})`;
+    style.transformOrigin = "top left";
+  }
+  return <div style={style}>{children}</div>;
+}
+
+/** Renders a single custom decor layer (color / gradient / image + blend / opacity / size). */
+function DecorLayerView({
+  layer,
+  slideIndex,
+  preset,
+}: {
+  layer: DecorLayer;
+  slideIndex: number;
+  preset: StylePreset;
+}) {
+  const { w: CANVAS_W, h: CANVAS_H } = useCanvasSize();
+  const base: React.CSSProperties = {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: CANVAS_W,
+    height: CANVAS_H,
+    pointerEvents: "none",
+  };
+  if (layer.blend !== "normal") base.mixBlendMode = layer.blend;
+  if (layer.opacity !== 1) base.opacity = layer.opacity;
+
+  if (layer.fillKind === "gradient" && layer.fill) {
+    if (layer.size !== 1) {
+      base.transform = `scale(${layer.size})`;
+      base.transformOrigin = "top left";
+    }
+    return <div style={{ ...base, background: layer.fill }} />;
+  }
+  if (layer.fillKind === "image" && layer.fill) {
+    return (
+      <div
+        style={{
+          ...base,
+          backgroundImage: `url(${layer.fill})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+    );
+  }
+
+  const color = layer.fillKind === "solid" && layer.fill ? layer.fill : preset.highlightColor;
+  return (
+    <DecorWrapper layer={layer}>
+      {renderBuiltInDecoration(layer.type, slideIndex, preset, color)}
+    </DecorWrapper>
+  );
+}
+
 function SlideBackground({
   bgType,
   slideIndex,
@@ -378,25 +510,54 @@ function SlideBackground({
   slideIndex: number;
   preset: StylePreset;
 }) {
-  switch (bgType) {
-    case "blobs":
-      return <SlideDecorations slideIndex={slideIndex} preset={preset} />;
-    case "grid":
-      return <GridDecoration preset={preset} />;
-    case "lines":
-      return <LinesDecoration preset={preset} />;
-    case "paper":
-      return <PaperDecoration preset={preset} />;
-    case "noise":
-      return <NoiseDecoration slideIndex={slideIndex} />;
-    case "bignumber":
-      return <BigNumberDecoration slideIndex={slideIndex} preset={preset} />;
-    case "glow":
-      return <GlowDecoration slideIndex={slideIndex} preset={preset} />;
-    case "none":
-    default:
-      return null;
-  }
+  const design = useDesign();
+  return (
+    <>
+      {renderBuiltInDecoration(bgType, slideIndex, preset)}
+      {design.decors
+        .filter((d) => d.enabled)
+        .map((layer) => (
+          <DecorLayerView key={layer.id} layer={layer} slideIndex={slideIndex} preset={preset} />
+        ))}
+    </>
+  );
+}
+
+/** Global logo / watermark overlay, read from the design context. */
+function LogoOverlay({ index, total }: { index: number; total: number }) {
+  const design = useDesign();
+  const logo = design.logo;
+  const { w: CANVAS_W } = useCanvasSize();
+  if (!logo.enabled || !logo.dataUrl) return null;
+  if (!logo.everySlide && index !== total - 1) return null;
+
+  const left = (logo.x / 100) * CANVAS_W;
+  const top = (logo.y / 100) * CANVAS_H;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: left - logo.width / 2,
+        top: top - logo.width / 2,
+        width: logo.width,
+        height: logo.width,
+        transform: `rotate(${logo.rotate}deg)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "none",
+        opacity: logo.opacity,
+        mixBlendMode: logo.blend !== "normal" ? logo.blend : undefined,
+        zIndex: 2,
+      }}
+    >
+      <img
+        src={logo.dataUrl}
+        alt="logo"
+        style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: logo.radius }}
+      />
+    </div>
+  );
 }
 
 // ============================================================
@@ -407,7 +568,8 @@ function renderWithHighlight(
   text: string,
   highlight: string | undefined,
   highlightColor: string,
-  style: "default" | "italic-box" = "default"
+  style: "default" | "italic-box" = "default",
+  blend: BlendMode = "normal"
 ): ReactNode {
   if (!highlight) return text;
   const escaped = highlight.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
@@ -434,6 +596,7 @@ function renderWithHighlight(
             whiteSpace: "nowrap",
             boxDecorationBreak: "clone",
             WebkitBoxDecorationBreak: "clone",
+            mixBlendMode: blend !== "normal" ? blend : undefined,
           }}
         >
           {part}
@@ -443,7 +606,11 @@ function renderWithHighlight(
     return (
       <span
         key={i}
-        style={{ color: highlightColor, position: "relative" }}
+        style={{
+          color: highlightColor,
+          position: "relative",
+          mixBlendMode: blend !== "normal" ? blend : undefined,
+        }}
       >
         {part}
       </span>
@@ -510,14 +677,18 @@ function SlideTitle({
         fontWeight: preset.titleFontWeight ?? 800,
         color: preset.titleColor ?? preset.accentColor,
         textTransform: (preset.titleUppercase ?? true) ? "uppercase" : "none",
-        letterSpacing: (preset.titleUppercase ?? true) ? "0.06em" : "-0.02em",
+        letterSpacing:
+          preset.letterSpacing !== undefined
+            ? `${preset.letterSpacing}em`
+            : (preset.titleUppercase ?? true) ? "0.06em" : "-0.02em",
+        textAlign: preset.titleAlign ?? "left",
         lineHeight: 1.1,
         marginBottom: 28,
         position: "relative",
         textWrap: "balance" as const,
       }}
     >
-      {renderWithHighlight(text, highlight, preset.highlightColor, highlightStyle)}
+      {renderWithHighlight(text, highlight, preset.highlightColor, highlightStyle, preset.accentBlend)}
     </div>
   );
 }
@@ -583,7 +754,7 @@ function SlideHook({
       style={{
         width: CANVAS_W,
         height: CANVAS_H,
-        background: preset.bgGradient || preset.bg,
+        ...bgStyle(preset),
         position: "relative",
         display: "flex",
         flexDirection: "column",
@@ -609,9 +780,10 @@ function SlideHook({
           textWrap: "balance" as const,
         }}
       >
-        {renderWithHighlight(data.text || "", data.highlight, preset.highlightColor, data.highlightStyle)}
+        {renderWithHighlight(data.text || "", data.highlight, preset.highlightColor, data.highlightStyle, preset.accentBlend)}
       </div>
       <SlideCounter current={index} total={total} color={preset.accentColor} />
+      <LogoOverlay index={index} total={total} />
     </div>
   );
 }
@@ -669,7 +841,7 @@ function SlideBody({
       style={{
         width: CANVAS_W,
         height: CANVAS_H,
-        background: preset.bgGradient || preset.bg,
+        ...bgStyle(preset),
         position: "relative",
         display: "flex",
         flexDirection: "column",
@@ -726,7 +898,7 @@ function SlideBody({
             textWrap: "balance" as const,
           }}
         >
-          {renderWithHighlight(data.text || "", data.highlight, preset.highlightColor, data.highlightStyle)}
+          {renderWithHighlight(data.text || "", data.highlight, preset.highlightColor, data.highlightStyle, preset.accentBlend)}
         </div>
       )}
       {data.handle && (
@@ -745,6 +917,7 @@ function SlideBody({
         </div>
       )}
       <SlideCounter current={index} total={total} color={preset.accentColor} />
+      <LogoOverlay index={index} total={total} />
     </div>
   );
 }
@@ -774,7 +947,7 @@ function SlideShell({
       style={{
         width: CANVAS_W,
         height: CANVAS_H,
-        background: preset.bgGradient || preset.bg,
+        ...bgStyle(preset),
         position: "relative",
         display: "flex",
         flexDirection: "column",
@@ -787,6 +960,7 @@ function SlideShell({
       <SlideBackground bgType={bgType} slideIndex={index} preset={preset} />
       {children}
       <SlideCounter current={index} total={total} color={preset.accentColor} />
+      <LogoOverlay index={index} total={total} />
     </div>
   );
 }
@@ -960,7 +1134,7 @@ function SlideQuote({
           textWrap: "balance" as const,
         }}
       >
-        {renderWithHighlight(data.text || "", data.highlight, preset.highlightColor, data.highlightStyle)}
+        {renderWithHighlight(data.text || "", data.highlight, preset.highlightColor, data.highlightStyle, preset.accentBlend)}
       </div>
       {data.author && (
         <div
@@ -1356,7 +1530,7 @@ function SlideEmoji({
               textWrap: "balance" as const,
             }}
           >
-            {renderWithHighlight(data.title, data.highlight, preset.highlightColor, data.highlightStyle)}
+            {renderWithHighlight(data.title, data.highlight, preset.highlightColor, data.highlightStyle, preset.accentBlend)}
           </div>
         )}
         {data.text && (
@@ -1434,7 +1608,7 @@ function SlideNumber({
               marginBottom: data.text ? 16 : 0,
             }}
           >
-            {renderWithHighlight(data.title, data.highlight, preset.highlightColor, data.highlightStyle)}
+            {renderWithHighlight(data.title, data.highlight, preset.highlightColor, data.highlightStyle, preset.accentBlend)}
           </div>
         )}
         {data.text && (
@@ -1470,31 +1644,45 @@ function Slide({
   total: number;
   bgType: BgType;
 }) {
+  const p = useMemo(() => {
+    const o: Partial<StylePreset> = {};
+    if (data.fontFamily) o.fontFamily = data.fontFamily;
+    if (data.textColor) o.textColor = data.textColor;
+    if (data.align) {
+      o.titleAlign = data.align;
+      o.bodyAlign = data.align;
+    }
+    if (data.titleSize) o.titleFontSize = data.titleSize;
+    if (data.bodySize) o.bodyFontSize = data.bodySize;
+    if (data.titleUppercase !== undefined) o.titleUppercase = data.titleUppercase;
+    return Object.keys(o).length ? { ...preset, ...o } : preset;
+  }, [preset, data]);
+
   switch (data.type) {
     case "hook":
-      return <SlideHook data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideHook data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "list":
-      return <SlideList data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideList data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "stats":
-      return <SlideStats data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideStats data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "quote":
-      return <SlideQuote data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideQuote data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "checklist":
-      return <SlideChecklist data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideChecklist data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "process":
-      return <SlideProcess data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideProcess data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "comparison":
-      return <SlideComparison data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideComparison data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "image":
-      return <SlideImage data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideImage data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "emoji":
-      return <SlideEmoji data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideEmoji data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "number":
-      return <SlideNumber data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideNumber data={data} preset={p} index={index} total={total} bgType={bgType} />;
     case "body":
     case "cta":
     default:
-      return <SlideBody data={data} preset={preset} index={index} total={total} bgType={bgType} />;
+      return <SlideBody data={data} preset={p} index={index} total={total} bgType={bgType} />;
   }
 }
 
@@ -1637,21 +1825,80 @@ const T = {
 export default function CarouselPage() {
   const [lang, setLang] = useState<Lang>("ru");
   const t = T[lang];
-  const [fontId, setFontId] = useState<FontId>(DEFAULT_FONT);
-  const [surfaceId, setSurfaceId] = useState<SurfaceId>(DEFAULT_SURFACE);
-  const [accentId, setAccentId] = useState<AccentId>(DEFAULT_ACCENT);
+  const [fontId, setFontId] = useState<string>(DEFAULT_FONT);
+  const [surfaceId, setSurfaceId] = useState<string>(DEFAULT_SURFACE);
+  const [accentId, setAccentId] = useState<string>(DEFAULT_ACCENT);
   const [purposeId, setPurposeId] = useState<PurposeId>(DEFAULT_PURPOSE);
   const [formatId, setFormatId] = useState<FormatId>(DEFAULT_FORMAT);
   const [bgType, setBgType] = useState<BgType>(DEFAULT_BG);
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
+  const [showCustomizer, setShowCustomizer] = useState(true);
   const langRef = useRef<Lang>("ru");
   langRef.current = lang;
   const offscreenRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  // ---- custom assets (fonts / surfaces / accents / decors / logo / typography) ----
+  const [customData, setCustomData] = useState<CustomData>(() => defaultData());
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    setCustomData(loadCustomData());
+    loadedRef.current = true;
+  }, []);
+  useEffect(() => {
+    if (loadedRef.current) saveCustomData(customData);
+  }, [customData]);
+  useEffect(() => {
+    const cleanups = customData.fonts.map(registerFontFace);
+    return () => cleanups.forEach((c) => c());
+  }, [customData.fonts]);
+
+  // merge custom assets into the style axes
+  const fontOptions: FontStyle[] = [
+    ...Object.values(FONT_STYLES),
+    ...customData.fonts.map(
+      (f): FontStyle => ({
+        id: f.id,
+        name: f.name,
+        fontFamily: `'${f.family}', sans-serif`,
+        hookFontFamily: `'${f.family}', sans-serif`,
+      })
+    ),
+  ];
+  const surfaceOptions: Surface[] = [
+    ...Object.values(SURFACES),
+    ...customData.surfaces.map((s: CustomSurface): Surface => {
+      const base = {
+        id: s.id,
+        name: s.name,
+        textColor: s.textColor,
+        textSecondary: s.textSecondary,
+        accentColor: s.accentColor,
+      };
+      if (s.kind === "image") {
+        return {
+          ...base,
+          bg: "#0a0a0a",
+          bgImage: { url: s.imageData ?? "", tint: s.overlayColor, blend: s.blendMode },
+        };
+      }
+      if (s.kind === "gradient") {
+        return { ...base, bg: s.color ?? "#0a0a0a", bgGradient: s.gradient };
+      }
+      return { ...base, bg: s.color ?? "#0a0a0a" };
+    }),
+  ];
+  const accentOptions: Accent[] = [
+    ...Object.values(ACCENTS),
+    ...customData.accents.map((a): Accent => ({ id: a.id, name: a.name, color: a.color })),
+  ];
+
   const canvasW = FORMAT_PRESETS[formatId].w;
   const canvasH = FORMAT_PRESETS[formatId].h;
-  const preset = composePreset(FONT_STYLES[fontId], SURFACES[surfaceId], ACCENTS[accentId], purposeId);
+  const font = fontOptions.find((f) => f.id === fontId) ?? FONT_STYLES[DEFAULT_FONT];
+  const surface = surfaceOptions.find((s) => s.id === surfaceId) ?? SURFACES[DEFAULT_SURFACE];
+  const accent = accentOptions.find((a) => a.id === accentId) ?? ACCENTS[DEFAULT_ACCENT];
+  const preset = applyTypography(composePreset(font, surface, accent, purposeId), customData.typo);
 
   const captureSlide = useCallback(
     async (index: number): Promise<string | null> => {
@@ -1743,7 +1990,12 @@ export default function CarouselPage() {
 
   return (
     <CanvasSizeContext.Provider value={{ w: canvasW, h: canvasH }}>
+    <DesignContext.Provider value={customData}>
     <div suppressHydrationWarning style={{ minHeight: "100vh", padding: 32 }}>
+      {/* Customizer panel */}
+      {showCustomizer && (
+        <Customizer data={customData} onChange={setCustomData} />
+      )}
       {/* Toolbar */}
       <div style={{ marginBottom: 32 }}>
         {/* Title + Export + Lang toggle */}
@@ -1755,6 +2007,24 @@ export default function CarouselPage() {
             </div>
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+            {/* Customizer toggle */}
+            <button
+              onClick={() => setShowCustomizer((v) => !v)}
+              className="tb-btn"
+              style={{
+                padding: "8px 16px",
+                minHeight: 36,
+                borderRadius: 8,
+                border: showCustomizer ? "2px solid #A78BFA" : "1px solid #333",
+                background: showCustomizer ? "#A78BFA" : "transparent",
+                color: showCustomizer ? "#000" : "#bbb",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              🎛 Customize
+            </button>
             {/* Lang toggle */}
             <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #333" }}>
               {(["en", "ru"] as Lang[]).map((l) => (
@@ -1819,7 +2089,7 @@ export default function CarouselPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowFont}</span>
             <div style={{ display: "flex", gap: 6 }}>
-              {Object.values(FONT_STYLES).map((f) => (
+              {fontOptions.map((f) => (
                 <button key={f.id} onClick={() => setFontId(f.id)} style={{ padding: "9px 14px", minHeight: 36, borderRadius: 8, border: fontId === f.id ? "2px solid #6366F1" : "1px solid #333", background: fontId === f.id ? "#6366F1" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
                   {f.name}
                 </button>
@@ -1831,9 +2101,9 @@ export default function CarouselPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowSurface}</span>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {Object.values(SURFACES).map((s) => (
+              {surfaceOptions.map((s) => (
                 <button key={s.id} onClick={() => setSurfaceId(s.id)} style={{ padding: "9px 14px", minHeight: 36, borderRadius: 8, border: surfaceId === s.id ? "2px solid #6366F1" : "1px solid #333", background: surfaceId === s.id ? "#6366F1" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
-                  {t.surfaces[s.id]}
+                  {t.surfaces[s.id as SurfaceId] ?? s.name}
                 </button>
               ))}
             </div>
@@ -1843,11 +2113,11 @@ export default function CarouselPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowAccent}</span>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {Object.values(ACCENTS).map((a) => (
+              {accentOptions.map((a) => (
                 <button
                   key={a.id}
                   onClick={() => setAccentId(a.id)}
-                  title={t.accents[a.id]}
+                  title={t.accents[a.id as AccentId] ?? a.name}
                   style={{
                     padding: "9px 14px",
                     minHeight: 36,
@@ -1861,7 +2131,7 @@ export default function CarouselPage() {
                   }}
                   className="tb-btn"
                 >
-                  {t.accents[a.id]}
+                  {t.accents[a.id as AccentId] ?? a.name}
                 </button>
               ))}
             </div>
@@ -1955,6 +2225,7 @@ export default function CarouselPage() {
         {t.footer(canvasW, canvasH, SLIDES.length)}
       </div>
     </div>
+    </DesignContext.Provider>
     </CanvasSizeContext.Provider>
   );
 }

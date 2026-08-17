@@ -70,17 +70,27 @@ export type AccentId =
 export type PurposeId = "carousel" | "presentation";
 
 export interface FontStyle {
-  id: FontId;
+  id: string;
   name: string;
   fontFamily: string;
   hookFontFamily?: string;
 }
 
+export interface BgImage {
+  /** image URL or data URL */
+  url: string;
+  /** tint color layered under the image */
+  tint?: string;
+  /** CSS background-blend-mode for the image against the tint */
+  blend?: BlendMode;
+}
+
 export interface Surface {
-  id: SurfaceId;
+  id: string;
   name: string;
   bg: string;
   bgGradient?: string;
+  bgImage?: BgImage;
   textColor: string;
   textSecondary: string;
   /** Color used for titles, dividers, badges. For most surfaces equals textColor. */
@@ -88,7 +98,7 @@ export interface Surface {
 }
 
 export interface Accent {
-  id: AccentId;
+  id: string;
   name: string;
   /** Color used for highlighted words. */
   color: string;
@@ -128,6 +138,13 @@ export interface SlideData {
   bigNumber?: string;
   // highlight variant — "italic-box" renders highlighted word in Playfair italic on colored box
   highlightStyle?: "default" | "italic-box";
+  // ---- per-slide text overrides (optional, applied on top of global typography) ----
+  align?: TextAlign;
+  textColor?: string;
+  fontFamily?: string;
+  titleSize?: number;
+  bodySize?: number;
+  titleUppercase?: boolean;
 }
 
 // ---- Internal composed type used by all slide components ----
@@ -138,6 +155,7 @@ export interface StylePreset {
   name: string;
   bg: string;
   bgGradient?: string;
+  bgImage?: BgImage;
   textColor: string;
   textSecondary: string;
   accentColor: string;
@@ -154,6 +172,14 @@ export interface StylePreset {
   bodyFontWeight?: number;
   bodyColor?: string;
   bodyLineHeight?: number;
+  bodyFontSize?: number; // override for adaptive body sizing
+  // Alignment & spacing
+  titleAlign?: TextAlign;
+  bodyAlign?: TextAlign;
+  letterSpacing?: number;
+  bodyLetterSpacing?: number;
+  // Blend mode applied to highlighted/accent text
+  accentBlend?: BlendMode;
 }
 
 export interface FormatPreset {
@@ -162,4 +188,125 @@ export interface FormatPreset {
   w: number;
   h: number;
   platform: string;
+}
+
+// ============================================================
+// CUSTOMIZATION ASSETS (user-defined, persisted in localStorage)
+// ============================================================
+
+export type BlendMode =
+  | "normal"
+  | "multiply"
+  | "screen"
+  | "overlay"
+  | "darken"
+  | "lighten"
+  | "color-dodge"
+  | "color-burn"
+  | "hard-light"
+  | "soft-light"
+  | "difference"
+  | "exclusion"
+  | "hue"
+  | "saturation"
+  | "color"
+  | "luminosity";
+
+export type BgKind = "solid" | "gradient" | "image";
+
+export type TextAlign = "left" | "center" | "right";
+
+/** A user-uploaded font registered via @font-face (data URL). */
+export interface CustomFont {
+  id: string;
+  /** Display name shown in the Font menu (file name without extension). */
+  name: string;
+  /** CSS @font-face family name. */
+  family: string;
+  /** Font file as a data URL. */
+  dataUrl: string;
+  format: "woff2" | "woff" | "ttf" | "otf";
+}
+
+/** A user-defined background (solid / gradient / image) with text colors. */
+export interface CustomSurface {
+  id: string;
+  name: string;
+  kind: BgKind;
+  /** solid kind */
+  color?: string;
+  /** gradient kind — full CSS background string */
+  gradient?: string;
+  /** image kind — data URL */
+  imageData?: string;
+  /** image kind — blend of the image against the overlay color */
+  blendMode?: BlendMode;
+  /** image kind — tint color layered under the image */
+  overlayColor?: string;
+  /** image kind — 0..1 */
+  overlayOpacity?: number;
+  textColor: string;
+  textSecondary: string;
+  accentColor: string;
+}
+
+/** A user-defined accent (pop color for highlights). */
+export interface CustomAccent {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/** A single decoration layer, stackable with others. */
+export interface DecorLayer {
+  id: string;
+  type: BgType;
+  /** where the fill color comes from: accent, a solid color, a gradient, or an image */
+  fillKind: "auto" | "solid" | "gradient" | "image";
+  /** solid color / gradient CSS / image data URL (used when fillKind != auto) */
+  fill?: string;
+  opacity: number; // 0..1
+  blend: BlendMode;
+  size: number; // 0.1..3 scale factor
+  enabled: boolean;
+}
+
+/** Global logo / watermark overlay. */
+export interface LogoConfig {
+  enabled: boolean;
+  dataUrl?: string;
+  width: number; // px in canvas space
+  x: number; // percent of canvas width (center anchor)
+  y: number; // percent of canvas height (center anchor)
+  opacity: number; // 0..1
+  blend: BlendMode;
+  rotate: number; // degrees
+  radius: number; // border radius px
+  everySlide: boolean; // show on every slide vs. only the CTA slide
+}
+
+/** Global typography overrides applied on top of the style preset.
+ *  Sentinel semantics: numeric fields use 0 for "keep the theme default";
+ *  boolean/align/blend fields use `undefined` for "keep the theme default". */
+export interface TypographyConfig {
+  titleSize: number; // px, 0 = theme default
+  titleWeight: number; // 0 = theme default
+  titleUppercase?: boolean; // undefined = theme default
+  titleAlign?: TextAlign; // undefined = theme default
+  bodySize: number; // px, 0 = theme default (adaptive)
+  bodyWeight: number; // 0 = theme default
+  bodyLineHeight: number; // 0 = theme default
+  bodyAlign?: TextAlign; // undefined = theme default
+  letterSpacing: number; // em, 0 = theme default
+  accentBlend?: BlendMode; // undefined = theme default
+}
+
+/** Everything the user has customized. Persisted as a whole. */
+export interface CustomData {
+  fonts: CustomFont[];
+  surfaces: CustomSurface[];
+  accents: CustomAccent[];
+  decors: DecorLayer[];
+  logo: LogoConfig;
+  typo: TypographyConfig;
 }

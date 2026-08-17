@@ -173,6 +173,7 @@ export function composePreset(
     name: `${font.name} / ${surface.name} / ${accent.name}`,
     bg: surface.bg,
     bgGradient: surface.bgGradient,
+    bgImage: surface.bgImage,
     textColor: surface.textColor,
     textSecondary: surface.textSecondary,
     accentColor: surface.accentColor,
