@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { SlideData, SlideType, SlideSvg, BlendMode } from "../lib/types";
-import type { Lang } from "../lib/strings";
 import { UI } from "../lib/strings";
 import { BLEND_MODES, BLEND_LABELS } from "../lib/custom";
 import { Area, Btn, Card, Field, SelectInput, TextInput } from "./ui";
@@ -17,17 +16,15 @@ function linesFrom(text: string): string[] {
 }
 
 export default function ContentEditor({
-  lang,
   slides,
   onChange,
   onReset,
 }: {
-  lang: Lang;
   slides: SlideData[];
   onChange: (slides: SlideData[]) => void;
   onReset: () => void;
 }) {
-  const t = UI[lang];
+  const t = UI;
   const [confirmReset, setConfirmReset] = useState(false);
 
   const patch = (i: number, p: Partial<SlideData>) => {
@@ -84,7 +81,6 @@ export default function ContentEditor({
             key={i}
             index={i}
             total={slides.length}
-            lang={lang}
             slide={slide}
             onPatch={(p) => patch(i, p)}
             onRemove={() => remove(i)}
@@ -99,7 +95,6 @@ export default function ContentEditor({
 function SlideCard({
   index,
   total,
-  lang,
   slide,
   onPatch,
   onRemove,
@@ -107,13 +102,12 @@ function SlideCard({
 }: {
   index: number;
   total: number;
-  lang: Lang;
   slide: SlideData;
   onPatch: (p: Partial<SlideData>) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
 }) {
-  const t = UI[lang];
+  const t = UI;
   const [pointsMode, setPointsMode] = useState(!!slide.points);
 
   const switchType = (type: SlideType) => {
@@ -216,7 +210,7 @@ function SlideCard({
             </Field>
           </div>
           {pointsMode ? (
-            <PointsEditor points={slide.points} onChange={(points) => onPatch({ points })} lang={lang} />
+            <PointsEditor points={slide.points} onChange={(points) => onPatch({ points })} />
           ) : (
             <Field label={t.lblText}>
               <Area rows={3} value={slide.text ?? ""} onChange={(e) => onPatch({ text: e.target.value })} />
@@ -260,15 +254,15 @@ function SlideCard({
       )}
 
       {slide.type === "stats" && (
-        <StatsEditor stats={slide.stats} onChange={(stats) => onPatch({ stats })} lang={lang} />
+        <StatsEditor stats={slide.stats} onChange={(stats) => onPatch({ stats })} />
       )}
 
       {slide.type === "process" && (
-        <StepsEditor steps={slide.steps} onChange={(steps) => onPatch({ steps })} lang={lang} />
+        <StepsEditor steps={slide.steps} onChange={(steps) => onPatch({ steps })} />
       )}
 
       {slide.type === "comparison" && (
-        <ComparisonEditor slide={slide} onPatch={onPatch} lang={lang} />
+        <ComparisonEditor slide={slide} onPatch={onPatch} />
       )}
 
       {slide.type === "image" && (
@@ -319,7 +313,7 @@ function SlideCard({
             )}
           </div>
         </div>
-        {slide.svg && <SvgFields svg={slide.svg} onPatch={(p) => onPatch({ svg: { ...slide.svg!, ...p } })} lang={lang} />}
+        {slide.svg && <SvgFields svg={slide.svg} onPatch={(p) => onPatch({ svg: { ...slide.svg!, ...p } })} />}
       </div>
     </Card>
   );
@@ -347,13 +341,11 @@ function defaultSvg(): SlideSvg {
 function SvgFields({
   svg,
   onPatch,
-  lang,
 }: {
   svg: SlideSvg;
   onPatch: (p: Partial<SlideSvg>) => void;
-  lang: Lang;
 }) {
-  const t = UI[lang];
+  const t = UI;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
@@ -447,13 +439,11 @@ function SvgFields({
 function PointsEditor({
   points,
   onChange,
-  lang,
 }: {
   points: Array<{ type: "plus" | "minus"; text: string }> | undefined;
   onChange: (p: Array<{ type: "plus" | "minus"; text: string }>) => void;
-  lang: Lang;
 }) {
-  const t = UI[lang];
+  const t = UI;
   const list = points ?? [];
   const set = (i: number, p: Partial<{ type: "plus" | "minus"; text: string }>) =>
     onChange(list.map((x, idx) => (idx === i ? { ...x, ...p } : x)));
@@ -483,13 +473,11 @@ function PointsEditor({
 function StatsEditor({
   stats,
   onChange,
-  lang,
 }: {
   stats: Array<{ value: string; label: string }> | undefined;
   onChange: (s: Array<{ value: string; label: string }>) => void;
-  lang: Lang;
 }) {
-  const t = UI[lang];
+  const t = UI;
   const list = stats ?? [];
   return (
     <Field label={t.lblStats}>
@@ -514,13 +502,11 @@ function StatsEditor({
 function StepsEditor({
   steps,
   onChange,
-  lang,
 }: {
   steps: Array<{ title: string; text?: string }> | undefined;
   onChange: (s: Array<{ title: string; text?: string }>) => void;
-  lang: Lang;
 }) {
-  const t = UI[lang];
+  const t = UI;
   const list = steps ?? [];
   return (
     <Field label={t.lblSteps}>
@@ -545,13 +531,11 @@ function StepsEditor({
 function ComparisonEditor({
   slide,
   onPatch,
-  lang,
 }: {
   slide: SlideData;
   onPatch: (p: Partial<SlideData>) => void;
-  lang: Lang;
 }) {
-  const t = UI[lang];
+  const t = UI;
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
       <Field label={t.lblLeftLabel}>

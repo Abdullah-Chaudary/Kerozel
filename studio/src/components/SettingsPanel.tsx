@@ -3,22 +3,19 @@
 import { useState } from "react";
 import type { AiSettings } from "../lib/ai";
 import { PROVIDER_PRESETS, PROVIDER_IDS, saveSettings } from "../lib/ai";
-import type { Lang } from "../lib/strings";
 import { UI } from "../lib/strings";
 import { Btn, Card, Field, PanelTitle, SelectInput, TextInput } from "./ui";
 
 export default function SettingsPanel({
-  lang,
   settings,
   onChange,
   onClose,
 }: {
-  lang: Lang;
   settings: AiSettings;
   onChange: (s: AiSettings) => void;
   onClose: () => void;
 }) {
-  const t = UI[lang];
+  const t = UI;
   const [draft, setDraft] = useState<AiSettings>(settings);
   const [testing, setTesting] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);

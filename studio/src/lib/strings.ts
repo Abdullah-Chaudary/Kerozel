@@ -1,12 +1,9 @@
 // ============================================================
 // UI strings for the pipeline tabs (Create / Content / Export),
-// the settings panel and shared widgets. Keyed by language.
+// the settings panel and shared widgets.
 // ============================================================
 
-export type Lang = "en" | "ru";
-
 export const UI = {
-  en: {
     tabCreate: "1 · Create",
     tabContent: "2 · Content",
     tabExport: "3 · Customize & Export",
@@ -120,121 +117,9 @@ export const UI = {
 
     // generic
     preview: "Preview",
-  },
-
-  ru: {
-    tabCreate: "1 · Создать",
-    tabContent: "2 · Текст",
-    tabExport: "3 · Дизайн и экспорт",
-    settings: "Настройки",
-
-    createTitle: "Создайте карусель",
-    createSubtitle: "Опишите тему — ИИ напишет всю карусель по навыку написания каруселей.",
-    lblTopic: "Тема / промпт *",
-    phTopic: "Напр.: 5-шаговый фреймворк сильного поста в LinkedIn",
-    lblNotes: "Дополнительный контекст / информация",
-    phNotes: "Аудитория, тон, факты, примеры…",
-    lblSources: "Источники / факты для использования",
-    phSources: "По одному в строке — ИИ должен придерживаться этих фактов",
-    lblCount: "Кол-во слайдов",
-    lblGoal: "Цель / формат",
-    goalAuto: "Авто (что лучше)",
-    goalListicle: "Список (советы / ошибки)",
-    goalFramework: "Фреймворк (по шагам)",
-    goalBeforeAfter: "До / После",
-    goalData: "История с цифрами",
-    goalCase: "Мини кейс",
-    lblCtaHandle: "Хэндл для CTA-слайда",
-    phHandle: "@username",
-    lblMust: "Строки, которые должны быть",
-    phMust: "По одной в строке — будут включены дословно",
-    lblLogo: "Логотип на слайдах",
-    phLogo: "Загрузите логотип — приложение разместит его на слайдах само, не ИИ",
-    logoSet: "Логотип загружен ✓ (позиция/размер — во вкладке 3)",
-    btnGenerate: "Сгенерировать карусель",
-    generating: "Генерация…",
-    genDone: "Готово — проверьте текст во вкладке 2",
-    genErr: "Не удалось сгенерировать",
-    genEmpty: "Введите тему, чтобы начать",
-    hintSettings: "Провайдер ИИ: {provider} · модель: {model}",
-
-    contentTitle: "Редактирование текста",
-    contentSubtitle: "Каждый слайд редактируется. Изменения применяются сразу — во вкладке 3.",
-    addSlide: "+ Добавить слайд",
-    resetDraft: "Сбросить к демо-тексту",
-    moveUp: "▲",
-    moveDown: "▼",
-    remove: "✕",
-    lblType: "Тип",
-    lblBadge: "Бейдж (макс 4)",
-    lblHighlight: "Выделение (1-2 слова)",
-    lblHighlightStyle: "Стиль выделения",
-    hlDefault: "Цвет",
-    hlItalicBox: "Курсивная плашка",
-    lblTitle: "Заголовок",
-    lblText: "Текст",
-    lblBodyKind: "Содержимое",
-    bodyParagraph: "Абзац",
-    bodyPoints: "Плюсы / минусы",
-    lblHandle: "Хэндл",
-    lblAuthor: "Автор",
-    lblRole: "Роль",
-    lblItems: "Пункты (по одному в строке)",
-    lblLeftLabel: "Левая подпись",
-    lblLeftItems: "Левые пункты (по строке)",
-    lblRightLabel: "Правая подпись",
-    lblRightItems: "Правые пункты (по строке)",
-    lblImageSrc: "Путь к картинке (/images/…)",
-    lblCaption: "Подпись",
-    lblEmoji: "Эмодзи",
-    lblBigNumber: "Большое число",
-    addItem: "+ пункт",
-    lblStats: "Цифры",
-    lblValue: "Значение",
-    lblLabel: "Подпись",
-    lblSteps: "Шаги",
-    lblStepTitle: "Название шага",
-    lblStepText: "Текст шага (необязательно)",
-
-    svgTitle: "SVG-фон",
-    svgAdd: "+ Добавить SVG-фон",
-    svgRemove: "Удалить SVG",
-    svgShow: "Показать",
-    svgHide: "Скрыть",
-    svgEnabled: "Виден на слайде",
-    svgCode: "SVG-код",
-    svgCodePh: "Вставьте свой <svg>… код — или оставьте сгенерированный ИИ",
-    svgX: "Поз. X %",
-    svgY: "Поз. Y %",
-    svgSize: "Размер ×",
-    svgOpacity: "Прозрачность",
-    svgRotate: "Поворот °",
-    svgColor: "Цвет",
-    svgColorPh: "пусто = акцент темы",
-    svgRecolor: "Перекрасить все фигуры в этот цвет",
-    svgBlend: "Смешивание",
-    svgScaleHint: "0.1–3 относительно половины меньшего края холста",
-
-    settingsTitle: "Настройки ИИ",
-    settingsSubtitle: "Выберите любого провайдера — каждый пользователь приносит свою модель.",
-    lblProvider: "Провайдер",
-    lblApiKey: "API-ключ",
-    phApiKey: "sk-… (пусто для локальных провайдеров)",
-    lblBaseUrl: "Base URL",
-    lblModel: "Модель",
-    btnTest: "Проверить",
-    testing: "Проверка…",
-    testOk: "Соединение есть — модель ответила: ",
-    testErr: "Ошибка соединения",
-    btnSave: "Сохранить",
-    btnClose: "Закрыть",
-    saved: "Сохранено",
-
-    preview: "Предпросмотр",
-  },
 } as const;
 
-export type UIStrings = (typeof UI)["en"];
+export type UIStrings = typeof UI;
 
 export const GOALS = ["auto", "listicle", "framework", "beforeAfter", "data", "case"] as const;
 export type GoalId = (typeof GOALS)[number];

@@ -1831,10 +1831,7 @@ function SlidePreview({
 // I18N
 // ============================================================
 
-type Lang = "en" | "ru";
-
 const T = {
-  en: {
     appTitle: "Threads Carousel",
     rowFont: "Font",
     rowSurface: "Surface",
@@ -1863,37 +1860,6 @@ const T = {
       orange: "Orange", violet: "Violet", lime: "Lime", blue: "Blue",
       fuchsia: "Fuchsia", pink: "Pink", amber: "Amber",
     } as Record<AccentId, string>,
-  },
-  ru: {
-    appTitle: "Threads Carousel",
-    rowFont: "Ð¨Ñ€Ð¸Ñ„Ñ‚",
-    rowSurface: "Ð¤Ð¾Ð½",
-    rowAccent: "ÐÐºÑ†ÐµÐ½Ñ‚",
-    rowBg: "Ð”ÐµÐºÐ¾Ñ€",
-    rowMode: "Ð ÐµÐ¶Ð¸Ð¼",
-    rowFormat: "Ð¤Ð¾Ñ€Ð¼Ð°Ñ‚",
-    btnPdf: "PDF",
-    btnAll: "PNG",
-    statusDone: "Ð“Ð¾Ñ‚Ð¾Ð²Ð¾!",
-    statusExport: (i: number, n: number) => `Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ ${i}/${n}...`,
-    statusPdf: (i: number, n: number) => `PDF ${i}/${n}...`,
-    footer: (w: number, h: number, n: number) =>
-      `${w}Ã—${h}px â€” ${n} ÑÐ»Ð°Ð¹Ð´Ð¾Ð² â€” ÐÐ°Ð¶Ð¼Ð¸ Ð½Ð° ÑÐ»Ð°Ð¹Ð´ Ð´Ð»Ñ ÑÐºÑÐ¿Ð¾Ñ€Ñ‚Ð°`,
-    modes: { carousel: "ÐšÐ°Ñ€ÑƒÑÐµÐ»ÑŒ", presentation: "ÐŸÑ€ÐµÐ·ÐµÐ½Ñ‚Ð°Ñ†Ð¸Ñ" } as Record<PurposeId, string>,
-    bgs: {
-      none: "ÐÐµÑ‚", blobs: "ÐŸÑÑ‚Ð½Ð°", grid: "Ð¡ÐµÑ‚ÐºÐ°", lines: "Ð›Ð¸Ð½Ð¸Ð¸",
-      noise: "Ð¨ÑƒÐ¼", bignumber: "ÐÐ¾Ð¼ÐµÑ€", glow: "Ð¡Ð²ÐµÑ‡ÐµÐ½Ð¸Ðµ", paper: "Ð›Ð¸Ð½ÐµÐ¹ÐºÐ°",
-    } as Record<BgType, string>,
-    surfaces: {
-      dark: "Ð¢Ñ‘Ð¼Ð½Ñ‹Ð¹", white: "Ð‘ÐµÐ»Ñ‹Ð¹", light: "Ð¡Ð²ÐµÑ‚Ð»Ñ‹Ð¹", paper: "Ð‘ÑƒÐ¼Ð°Ð³Ð°",
-      gradient: "Ð“Ñ€Ð°Ð´Ð¸ÐµÐ½Ñ‚", pastel: "ÐŸÐ°ÑÑ‚ÐµÐ»ÑŒ", neon: "ÐÐµÐ¾Ð½", ember: "Ð£Ð³Ð¾Ð»ÑŒ",
-    } as Record<SurfaceId, string>,
-    accents: {
-      yellow: "Ð–Ñ‘Ð»Ñ‚Ñ‹Ð¹", red: "ÐšÑ€Ð°ÑÐ½Ñ‹Ð¹", teal: "Ð‘Ð¸Ñ€ÑŽÐ·Ð°", coral: "ÐšÐ¾Ñ€Ð°Ð»Ð»",
-      orange: "ÐžÑ€Ð°Ð½Ð¶", violet: "Ð¤Ð¸Ð¾Ð»ÐµÑ‚", lime: "Ð›Ð°Ð¹Ð¼", blue: "Ð¡Ð¸Ð½Ð¸Ð¹",
-      fuchsia: "Ð¤ÑƒÐºÑÐ¸Ñ", pink: "Ð Ð¾Ð·Ð¾Ð²Ñ‹Ð¹", amber: "Ð¯Ð½Ñ‚Ð°Ñ€ÑŒ",
-    } as Record<AccentId, string>,
-  },
 } as const;
 
 // ============================================================
@@ -1901,8 +1867,7 @@ const T = {
 // ============================================================
 
 export default function CarouselPage() {
-  const [lang, setLang] = useState<Lang>("ru");
-  const t = T[lang];
+  const t = T;
   const [slides, setSlides] = useState<SlideData[]>(() => {
     const draft = loadDraft();
     return Array.isArray(draft) && draft.length ? draft : SLIDES;
@@ -1919,8 +1884,6 @@ export default function CarouselPage() {
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
   const [showCustomizer, setShowCustomizer] = useState(true);
-  const langRef = useRef<Lang>("ru");
-  langRef.current = lang;
   const offscreenRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // ---- custom assets (fonts / surfaces / accents / decors / logo / typography) ----
@@ -2047,7 +2010,7 @@ export default function CarouselPage() {
 
   const exportAll = useCallback(async () => {
     setExporting(true);
-    const tl = T[langRef.current];
+    const tl = T;
     for (let i = 0; i < slides.length; i++) {
       setExportStatus(tl.statusExport(i + 1, slides.length));
       await exportSlide(i);
@@ -2066,7 +2029,7 @@ export default function CarouselPage() {
     const pdf = new jsPDF({ orientation, unit: "px", format: [canvasW, canvasH], hotfixes: ["px_scaling"] });
     const jpegOpts = { width: canvasW, height: canvasH, pixelRatio: 2, cacheBust: true, backgroundColor: preset.bg, quality: 0.92 };
 
-    const tl = T[langRef.current];
+    const tl = T;
     for (let i = 0; i < slides.length; i++) {
       setExportStatus(tl.statusPdf(i + 1, slides.length));
       const el = offscreenRefs.current[i];
@@ -2087,7 +2050,7 @@ export default function CarouselPage() {
     }
 
     pdf.save("slides.pdf");
-    setExportStatus(T[langRef.current].statusDone);
+    setExportStatus(T.statusDone);
     setExporting(false);
     setTimeout(() => setExportStatus(""), 2000);
   }, [preset.bg, canvasW, canvasH, slides]);
@@ -2113,7 +2076,7 @@ export default function CarouselPage() {
       suppressHydrationWarning
       style={{ minHeight: "100vh", padding: "24px 24px 48px", maxWidth: 1320, margin: "0 auto" }}
     >
-      {/* Header: title + tabs + lang + settings */}
+      {/* Header: title + tabs + settings */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
         <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: "#fff", letterSpacing: "-0.01em" }}>
           {t.appTitle}
@@ -2121,9 +2084,9 @@ export default function CarouselPage() {
         <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
           {(
             [
-              ["create", UI[lang].tabCreate],
-              ["content", UI[lang].tabContent],
-              ["export", UI[lang].tabExport],
+              ["create", UI.tabCreate],
+              ["content", UI.tabContent],
+              ["export", UI.tabExport],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -2147,34 +2110,11 @@ export default function CarouselPage() {
           ))}
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-          {/* Lang toggle */}
-          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #333" }}>
-            {(["en", "ru"] as Lang[]).map((l) => (
-              <button
-                key={l}
-                onClick={() => setLang(l)}
-                className="tb-btn"
-                style={{
-                  padding: "9px 12px",
-                  minHeight: 34,
-                  border: "none",
-                  background: lang === l ? "#555" : "transparent",
-                  color: lang === l ? "#fff" : "#888",
-                  cursor: "pointer",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                }}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
           {/* Settings */}
           <button
             onClick={() => setShowSettings((v) => !v)}
             className="tb-btn"
-            title={UI[lang].settings}
+            title={UI.settings}
             style={{
               padding: "8px 12px",
               minHeight: 34,
@@ -2195,7 +2135,6 @@ export default function CarouselPage() {
       {/* Settings modal */}
       {showSettings && (
         <SettingsPanel
-          lang={lang}
           settings={settings}
           onChange={(s) => setSettings(s)}
           onClose={() => setShowSettings(false)}
@@ -2204,12 +2143,12 @@ export default function CarouselPage() {
 
       {/* Tab 1 â€” Create */}
       {activeTab === "create" && (
-        <CreatePanel lang={lang} settings={settings} onLogo={applyLogo} onGenerated={handleGenerated} />
+        <CreatePanel settings={settings} onLogo={applyLogo} onGenerated={handleGenerated} />
       )}
 
       {/* Tab 2 â€” Content */}
       {activeTab === "content" && (
-        <ContentEditor lang={lang} slides={slides} onChange={setSlides} onReset={resetDraft} />
+        <ContentEditor slides={slides} onChange={setSlides} onReset={resetDraft} />
       )}
 
       {/* Tab 3 â€” Customize & Export */}
@@ -2232,7 +2171,7 @@ export default function CarouselPage() {
               fontWeight: 700,
             }}
           >
-            ðŸŽ› {UI[lang].preview}
+            ðŸŽ› {UI.preview}
           </button>
           <div style={{ fontSize: 12, color: "#666" }}>
             {FORMAT_PRESETS[formatId].name} â€” {canvasW}Ã—{canvasH}
@@ -2255,8 +2194,7 @@ export default function CarouselPage() {
         {/* Toolbar */}
         <div style={{ marginBottom: 32 }}>
           {/* 5-row axis toolbar â€” order: Format â†’ Mode â†’ Font â†’ Color â†’ Background */}
-          {/* key={lang} causes remount â†’ tbFadeIn animation plays on language switch */}
-          <div key={lang} className="tb-lang-fade" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="tb-lang-fade" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
             {/* Format */}
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import type { AiSettings } from "../lib/ai";
 import { PROVIDER_PRESETS } from "../lib/ai";
 import type { SlideData } from "../lib/types";
-import type { GoalId, Lang, UIStrings } from "../lib/strings";
+import type { GoalId, UIStrings } from "../lib/strings";
 import { GOALS, UI } from "../lib/strings";
 import { Area, Btn, Card, Field, PanelTitle, TextInput } from "./ui";
 
@@ -27,17 +27,15 @@ const GOAL_LABEL: Record<GoalId, keyof UIStrings> = {
 };
 
 export default function CreatePanel({
-  lang,
   settings,
   onLogo,
   onGenerated,
 }: {
-  lang: Lang;
   settings: AiSettings;
   onLogo: (dataUrl: string) => void;
   onGenerated: (slides: SlideData[]) => void;
 }) {
-  const t = UI[lang];
+  const t = UI;
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [topic, setTopic] = useState("");
@@ -84,7 +82,7 @@ export default function CreatePanel({
           goal: GOAL_VALUE[goal],
           handle,
           mustInclude: must.split("\n"),
-          lang: lang === "ru" ? "Russian" : "English",
+          lang: "English",
           settings,
         }),
       });
