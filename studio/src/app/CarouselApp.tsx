@@ -9,8 +9,15 @@ import type {
 import { FONT_STYLES, SURFACES, ACCENTS, composePreset, FORMAT_PRESETS } from "../lib/presets";
 import { SLIDES, DEFAULT_FONT, DEFAULT_SURFACE, DEFAULT_ACCENT, DEFAULT_PURPOSE, DEFAULT_BG, DEFAULT_FORMAT } from "../slides";
 import Customizer from "../components/Customizer";
+import CreatePanel from "../components/CreatePanel";
+import ContentEditor from "../components/ContentEditor";
+import SettingsPanel from "../components/SettingsPanel";
 import { loadCustomData, saveCustomData, registerFontFace, applyTypography, defaultData } from "../lib/custom";
 import type { PresetAxes, SavedPreset } from "../lib/custom";
+import { loadDraft, saveDraft, clearDraft } from "../lib/draft";
+import { loadSettings } from "../lib/ai";
+import type { AiSettings } from "../lib/ai";
+import { UI } from "../lib/strings";
 
 const CANVAS_W = FORMAT_PRESETS[DEFAULT_FORMAT].w;
 const CANVAS_H = FORMAT_PRESETS[DEFAULT_FORMAT].h;
@@ -1826,6 +1833,13 @@ const T = {
 export default function CarouselPage() {
   const [lang, setLang] = useState<Lang>("ru");
   const t = T[lang];
+  const [slides, setSlides] = useState<SlideData[]>(() => {
+    const draft = loadDraft();
+    return Array.isArray(draft) && draft.length ? draft : SLIDES;
+  });
+  const [activeTab, setActiveTab] = useState<"create" | "content" | "export">("create");
+  const [settings, setSettings] = useState<AiSettings>(() => loadSettings());
+  const [showSettings, setShowSettings] = useState(false);
   const [fontId, setFontId] = useState<string>(DEFAULT_FONT);
   const [surfaceId, setSurfaceId] = useState<string>(DEFAULT_SURFACE);
   const [accentId, setAccentId] = useState<string>(DEFAULT_ACCENT);
@@ -1849,6 +1863,9 @@ export default function CarouselPage() {
   useEffect(() => {
     if (loadedRef.current) saveCustomData(customData);
   }, [customData]);
+  useEffect(() => {
+    saveDraft(slides);
+  }, [slides]);
   useEffect(() => {
     const cleanups = customData.fonts.map(registerFontFace);
     return () => cleanups.forEach((c) => c());
@@ -1947,25 +1964,25 @@ export default function CarouselPage() {
       const dataUrl = await captureSlide(index);
       if (!dataUrl) return;
       const link = document.createElement("a");
-      link.download = `${String(index + 1).padStart(2, "0")}-${SLIDES[index].type}.png`;
+      link.download = `${String(index + 1).padStart(2, "0")}-${slides[index].type}.png`;
       link.href = dataUrl;
       link.click();
     },
-    [captureSlide]
+    [captureSlide, slides]
   );
 
   const exportAll = useCallback(async () => {
     setExporting(true);
     const tl = T[langRef.current];
-    for (let i = 0; i < SLIDES.length; i++) {
-      setExportStatus(tl.statusExport(i + 1, SLIDES.length));
+    for (let i = 0; i < slides.length; i++) {
+      setExportStatus(tl.statusExport(i + 1, slides.length));
       await exportSlide(i);
       await new Promise((r) => setTimeout(r, 300));
     }
     setExportStatus(tl.statusDone);
     setExporting(false);
     setTimeout(() => setExportStatus(""), 2000);
-  }, [exportSlide]);
+  }, [exportSlide, slides]);
 
   const exportPdf = useCallback(async () => {
     setExporting(true);
@@ -1976,8 +1993,8 @@ export default function CarouselPage() {
     const jpegOpts = { width: canvasW, height: canvasH, pixelRatio: 2, cacheBust: true, backgroundColor: preset.bg, quality: 0.92 };
 
     const tl = T[langRef.current];
-    for (let i = 0; i < SLIDES.length; i++) {
-      setExportStatus(tl.statusPdf(i + 1, SLIDES.length));
+    for (let i = 0; i < slides.length; i++) {
+      setExportStatus(tl.statusPdf(i + 1, slides.length));
       const el = offscreenRefs.current[i];
       if (!el) continue;
 
@@ -1999,71 +2016,154 @@ export default function CarouselPage() {
     setExportStatus(T[langRef.current].statusDone);
     setExporting(false);
     setTimeout(() => setExportStatus(""), 2000);
-  }, [preset.bg, canvasW, canvasH]);
+  }, [preset.bg, canvasW, canvasH, slides]);
+
+  const applyLogo = useCallback((dataUrl: string) => {
+    setCustomData((d) => ({ ...d, logo: { ...d.logo, dataUrl, enabled: true } }));
+  }, []);
+
+  const handleGenerated = useCallback((s: SlideData[]) => {
+    setSlides(s);
+    setActiveTab("content");
+  }, []);
+
+  const resetDraft = useCallback(() => {
+    clearDraft();
+    setSlides(SLIDES);
+  }, []);
 
   return (
     <CanvasSizeContext.Provider value={{ w: canvasW, h: canvasH }}>
     <DesignContext.Provider value={customData}>
     <div
       suppressHydrationWarning
-      style={{ minHeight: "100vh", padding: "32px 24px", maxWidth: 1320, margin: "0 auto" }}
+      style={{ minHeight: "100vh", padding: "24px 24px 48px", maxWidth: 1320, margin: "0 auto" }}
     >
-      {/* Customizer panel */}
-      {showCustomizer && (
-        <Customizer data={customData} onChange={setCustomData} axes={axes} onApply={applyPreset} />
-      )}
-      {/* Toolbar */}
-      <div style={{ marginBottom: 32 }}>
-        {/* Title + Export + Lang toggle */}
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, textWrap: "balance" } as React.CSSProperties}>{t.appTitle}</h1>
-            <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
-              {FORMAT_PRESETS[formatId].name} — {canvasW}×{canvasH}
-            </div>
-          </div>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-            {/* Customizer toggle */}
+      {/* Header: title + tabs + lang + settings */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: "#fff", letterSpacing: "-0.01em" }}>
+          {t.appTitle}
+        </h1>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {(
+            [
+              ["create", UI[lang].tabCreate],
+              ["content", UI[lang].tabContent],
+              ["export", UI[lang].tabExport],
+            ] as const
+          ).map(([id, label]) => (
             <button
-              onClick={() => setShowCustomizer((v) => !v)}
+              key={id}
+              onClick={() => setActiveTab(id)}
               className="tb-btn"
               style={{
-                padding: "8px 16px",
-                minHeight: 36,
+                padding: "8px 14px",
+                minHeight: 34,
                 borderRadius: 8,
-                border: showCustomizer ? "2px solid #A78BFA" : "1px solid #333",
-                background: showCustomizer ? "#A78BFA" : "transparent",
-                color: showCustomizer ? "#000" : "#bbb",
+                border: activeTab === id ? "2px solid #A78BFA" : "1px solid #333",
+                background: activeTab === id ? "#A78BFA" : "transparent",
+                color: activeTab === id ? "#000" : "#bbb",
                 cursor: "pointer",
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 700,
               }}
             >
-              🎛 Customize
+              {label}
             </button>
-            {/* Lang toggle */}
-            <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #333" }}>
-              {(["en", "ru"] as Lang[]).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => setLang(l)}
-                  className="tb-btn"
-                  style={{
-                    padding: "9px 12px",
-                    minHeight: 36,
-                    border: "none",
-                    background: lang === l ? "#555" : "transparent",
-                    color: lang === l ? "#fff" : "#888",
-                    cursor: "pointer",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
+          ))}
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Lang toggle */}
+          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #333" }}>
+            {(["en", "ru"] as Lang[]).map((l) => (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                className="tb-btn"
+                style={{
+                  padding: "9px 12px",
+                  minHeight: 34,
+                  border: "none",
+                  background: lang === l ? "#555" : "transparent",
+                  color: lang === l ? "#fff" : "#888",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                }}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+          {/* Settings */}
+          <button
+            onClick={() => setShowSettings((v) => !v)}
+            className="tb-btn"
+            title={UI[lang].settings}
+            style={{
+              padding: "8px 12px",
+              minHeight: 34,
+              borderRadius: 8,
+              border: showSettings ? "2px solid #A78BFA" : "1px solid #333",
+              background: showSettings ? "#A78BFA" : "transparent",
+              color: showSettings ? "#000" : "#bbb",
+              cursor: "pointer",
+              fontSize: 14,
+              lineHeight: 1,
+            }}
+          >
+            ⚙
+          </button>
+        </div>
+      </div>
+
+      {/* Settings modal */}
+      {showSettings && (
+        <SettingsPanel
+          lang={lang}
+          settings={settings}
+          onChange={(s) => setSettings(s)}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Tab 1 — Create */}
+      {activeTab === "create" && (
+        <CreatePanel lang={lang} settings={settings} onLogo={applyLogo} onGenerated={handleGenerated} />
+      )}
+
+      {/* Tab 2 — Content */}
+      {activeTab === "content" && (
+        <ContentEditor lang={lang} slides={slides} onChange={setSlides} onReset={resetDraft} />
+      )}
+
+      {/* Tab 3 — Customize & Export */}
+      {activeTab === "export" && (
+        <>
+        {/* Export actions row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+          <button
+            onClick={() => setShowCustomizer((v) => !v)}
+            className="tb-btn"
+            style={{
+              padding: "8px 16px",
+              minHeight: 36,
+              borderRadius: 8,
+              border: showCustomizer ? "2px solid #A78BFA" : "1px solid #333",
+              background: showCustomizer ? "#A78BFA" : "transparent",
+              color: showCustomizer ? "#000" : "#bbb",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            🎛 {UI[lang].preview}
+          </button>
+          <div style={{ fontSize: 12, color: "#666" }}>
+            {FORMAT_PRESETS[formatId].name} — {canvasW}×{canvasH}
+          </div>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button onClick={exportPdf} disabled={exporting} style={{ padding: "8px 20px", minWidth: 120, minHeight: 36, borderRadius: 8, border: "none", background: exporting ? "#444" : "#6366F1", color: "#fff", cursor: exporting ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums" }} className="tb-btn">
               {exporting ? exportStatus : t.btnPdf}
             </button>
@@ -2073,173 +2173,182 @@ export default function CarouselPage() {
           </div>
         </div>
 
-        {/* 5-row axis toolbar — order: Format → Mode → Font → Color → Background */}
-        {/* key={lang} causes remount → tbFadeIn animation plays on language switch */}
-        <div key={lang} className="tb-lang-fade" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {/* Customizer panel */}
+        {showCustomizer && (
+          <Customizer data={customData} onChange={setCustomData} axes={axes} onApply={applyPreset} />
+        )}
 
-          {/* Format */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowFormat}</span>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {Object.values(FORMAT_PRESETS).map((f) => (
-                <button key={f.id} onClick={() => setFormatId(f.id)} title={f.platform} style={{ padding: "9px 14px", minHeight: 36, borderRadius: 8, border: formatId === f.id ? "2px solid #06B6D4" : "1px solid #333", background: formatId === f.id ? "#06B6D4" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
-                  {f.name}
-                </button>
-              ))}
+        {/* Toolbar */}
+        <div style={{ marginBottom: 32 }}>
+          {/* 5-row axis toolbar — order: Format → Mode → Font → Color → Background */}
+          {/* key={lang} causes remount → tbFadeIn animation plays on language switch */}
+          <div key={lang} className="tb-lang-fade" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+            {/* Format */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowFormat}</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {Object.values(FORMAT_PRESETS).map((f) => (
+                  <button key={f.id} onClick={() => setFormatId(f.id)} title={f.platform} style={{ padding: "9px 14px", minHeight: 36, borderRadius: 8, border: formatId === f.id ? "2px solid #06B6D4" : "1px solid #333", background: formatId === f.id ? "#06B6D4" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
+                    {f.name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Mode */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowMode}</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              {(["carousel", "presentation"] as PurposeId[]).map((p) => (
-                <button key={p} onClick={() => setPurposeId(p)} style={{ padding: "9px 14px", minWidth: 110, minHeight: 36, borderRadius: 8, border: purposeId === p ? "2px solid #F59E0B" : "1px solid #333", background: purposeId === p ? "#F59E0B" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
-                  {t.modes[p]}
-                </button>
-              ))}
+            {/* Mode */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowMode}</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {(["carousel", "presentation"] as PurposeId[]).map((p) => (
+                  <button key={p} onClick={() => setPurposeId(p)} style={{ padding: "9px 14px", minWidth: 110, minHeight: 36, borderRadius: 8, border: purposeId === p ? "2px solid #F59E0B" : "1px solid #333", background: purposeId === p ? "#F59E0B" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
+                    {t.modes[p]}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Font */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowFont}</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              {fontOptions.map((f) => (
-                <button key={f.id} onClick={() => setFontId(f.id)} style={{ padding: "9px 14px", minHeight: 36, borderRadius: 8, border: fontId === f.id ? "2px solid #6366F1" : "1px solid #333", background: fontId === f.id ? "#6366F1" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
-                  {f.name}
-                </button>
-              ))}
+            {/* Font */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowFont}</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {fontOptions.map((f) => (
+                  <button key={f.id} onClick={() => setFontId(f.id)} style={{ padding: "9px 14px", minHeight: 36, borderRadius: 8, border: fontId === f.id ? "2px solid #6366F1" : "1px solid #333", background: fontId === f.id ? "#6366F1" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
+                    {f.name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Surface (bg + text) */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowSurface}</span>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {surfaceOptions.map((s) => (
-                <button key={s.id} onClick={() => setSurfaceId(s.id)} style={{ padding: "9px 14px", minHeight: 36, borderRadius: 8, border: surfaceId === s.id ? "2px solid #6366F1" : "1px solid #333", background: surfaceId === s.id ? "#6366F1" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
-                  {t.surfaces[s.id as SurfaceId] ?? s.name}
-                </button>
-              ))}
+            {/* Surface (bg + text) */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowSurface}</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {surfaceOptions.map((s) => (
+                  <button key={s.id} onClick={() => setSurfaceId(s.id)} style={{ padding: "9px 14px", minHeight: 36, borderRadius: 8, border: surfaceId === s.id ? "2px solid #6366F1" : "1px solid #333", background: surfaceId === s.id ? "#6366F1" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
+                    {t.surfaces[s.id as SurfaceId] ?? s.name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Accent (pop color) */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowAccent}</span>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {accentOptions.map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => setAccentId(a.id)}
-                  title={t.accents[a.id as AccentId] ?? a.name}
-                  style={{
-                    padding: "9px 14px",
-                    minHeight: 36,
-                    borderRadius: 8,
-                    border: accentId === a.id ? `2px solid ${a.color}` : "1px solid #333",
-                    background: accentId === a.id ? a.color : "transparent",
-                    color: accentId === a.id ? "#000" : "#fff",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}
-                  className="tb-btn"
-                >
-                  {t.accents[a.id as AccentId] ?? a.name}
-                </button>
-              ))}
+            {/* Accent (pop color) */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowAccent}</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {accentOptions.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => setAccentId(a.id)}
+                    title={t.accents[a.id as AccentId] ?? a.name}
+                    style={{
+                      padding: "9px 14px",
+                      minHeight: 36,
+                      borderRadius: 8,
+                      border: accentId === a.id ? `2px solid ${a.color}` : "1px solid #333",
+                      background: accentId === a.id ? a.color : "transparent",
+                      color: accentId === a.id ? "#000" : "#fff",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                    className="tb-btn"
+                  >
+                    {t.accents[a.id as AccentId] ?? a.name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Background */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowBg}</span>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {(["none", "blobs", "grid", "lines", "paper", "noise", "bignumber", "glow"] as BgType[]).map((bg) => (
-                <button key={bg} onClick={() => setBgType(bg)} style={{ padding: "9px 12px", minHeight: 36, borderRadius: 8, border: bgType === bg ? "2px solid #22C55E" : "1px solid #333", background: bgType === bg ? "#22C55E" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
-                  {t.bgs[bg]}
-                </button>
-              ))}
+            {/* Background */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowBg}</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {(["none", "blobs", "grid", "lines", "paper", "noise", "bignumber", "glow"] as BgType[]).map((bg) => (
+                  <button key={bg} onClick={() => setBgType(bg)} style={{ padding: "9px 12px", minHeight: 36, borderRadius: 8, border: bgType === bg ? "2px solid #22C55E" : "1px solid #333", background: bgType === bg ? "#22C55E" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
+                    {t.bgs[bg]}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
+          </div>
         </div>
-      </div>
 
-      {/* Preview Grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-          gap: 20,
-        }}
-      >
-        {SLIDES.map((slide, i) => (
-          <div key={i}>
-            <div
-              onClick={() => !exporting && exportSlide(i)}
-              className="slide-card"
-              title="Click to export this slide"
-            >
-              <SlidePreview
-                data={slide}
-                preset={preset}
-                index={i}
-                total={SLIDES.length}
-                bgType={bgType}
-              />
-            </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: "#888",
-                marginTop: 8,
-                textAlign: "center",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {i + 1}/{SLIDES.length} — {slide.type}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Offscreen slides for export — always rendered at (0,0), invisible via opacity */}
-      {SLIDES.map((slide, i) => (
+        {/* Preview Grid */}
         <div
-          key={`export-${i}`}
-          ref={(el) => {
-            offscreenRefs.current[i] = el;
-          }}
           style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: canvasW,
-            height: canvasH,
-            opacity: 0,
-            pointerEvents: "none",
-            zIndex: -1,
-            fontFamily: preset.fontFamily,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+            gap: 20,
           }}
         >
-          <Slide data={slide} preset={preset} index={i} total={SLIDES.length} bgType={bgType} />
+          {slides.map((slide, i) => (
+            <div key={i}>
+              <div
+                onClick={() => !exporting && exportSlide(i)}
+                className="slide-card"
+                title="Click to export this slide"
+              >
+                <SlidePreview
+                  data={slide}
+                  preset={preset}
+                  index={i}
+                  total={slides.length}
+                  bgType={bgType}
+                />
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#888",
+                  marginTop: 8,
+                  textAlign: "center",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {i + 1}/{slides.length} — {slide.type}
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
 
-      {/* Info */}
-      <div
-        style={{
-          marginTop: 32,
-          fontSize: 13,
-          color: "#666",
-          textAlign: "center",
-        }}
-      >
-        {t.footer(canvasW, canvasH, SLIDES.length)}
-      </div>
+        {/* Offscreen slides for export — always rendered at (0,0), invisible via opacity */}
+        {slides.map((slide, i) => (
+          <div
+            key={`export-${i}`}
+            ref={(el) => {
+              offscreenRefs.current[i] = el;
+            }}
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: canvasW,
+              height: canvasH,
+              opacity: 0,
+              pointerEvents: "none",
+              zIndex: -1,
+              fontFamily: preset.fontFamily,
+            }}
+          >
+            <Slide data={slide} preset={preset} index={i} total={slides.length} bgType={bgType} />
+          </div>
+        ))}
+
+        {/* Info */}
+        <div
+          style={{
+            marginTop: 32,
+            fontSize: 13,
+            color: "#666",
+            textAlign: "center",
+          }}
+        >
+          {t.footer(canvasW, canvasH, slides.length)}
+        </div>
+        </>
+      )}
     </div>
     </DesignContext.Provider>
     </CanvasSizeContext.Provider>

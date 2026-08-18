@@ -1,0 +1,435 @@
+"use client";
+
+import { useState } from "react";
+import type { SlideData, SlideType } from "../lib/types";
+import type { Lang } from "../lib/strings";
+import { UI } from "../lib/strings";
+import { Area, Btn, Card, Field, SelectInput, TextInput } from "./ui";
+
+const TYPE_OPTIONS: SlideType[] = [
+  "hook", "body", "cta", "quote", "stats", "list",
+  "checklist", "process", "comparison", "image", "emoji", "number",
+];
+
+function linesFrom(text: string): string[] {
+  return text.split("\n").map((s) => s.trim()).filter(Boolean);
+}
+
+export default function ContentEditor({
+  lang,
+  slides,
+  onChange,
+  onReset,
+}: {
+  lang: Lang;
+  slides: SlideData[];
+  onChange: (slides: SlideData[]) => void;
+  onReset: () => void;
+}) {
+  const t = UI[lang];
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  const patch = (i: number, p: Partial<SlideData>) => {
+    onChange(slides.map((s, idx) => (idx === i ? { ...s, ...p } : s)));
+  };
+
+  const remove = (i: number) => onChange(slides.filter((_, idx) => idx !== i));
+
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= slides.length) return;
+    const next = [...slides];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+
+  const add = () => {
+    const next = [...slides];
+    const fresh: SlideData = { type: "body", title: "New slide", text: "New text" };
+    const last = next[next.length - 1];
+    if (last && last.type === "cta") next.splice(next.length - 1, 0, fresh);
+    else next.push(fresh);
+    onChange(next);
+  };
+
+  const reset = () => {
+    if (!confirmReset) {
+      setConfirmReset(true);
+      setTimeout(() => setConfirmReset(false), 3000);
+      return;
+    }
+    setConfirmReset(false);
+    onReset();
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: "#eee", textWrap: "balance" }}>{t.contentTitle}</h2>
+          <div style={{ fontSize: 12, color: "#8a8a92", marginTop: 4 }}>
+            {slides.length} · {t.contentSubtitle}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn variant="ghost" onClick={add}>{t.addSlide}</Btn>
+          <Btn variant="danger" onClick={reset}>{confirmReset ? "✓ " + t.resetDraft : t.resetDraft}</Btn>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {slides.map((slide, i) => (
+          <SlideCard
+            key={i}
+            index={i}
+            total={slides.length}
+            lang={lang}
+            slide={slide}
+            onPatch={(p) => patch(i, p)}
+            onRemove={() => remove(i)}
+            onMove={(d) => move(i, d)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SlideCard({
+  index,
+  total,
+  lang,
+  slide,
+  onPatch,
+  onRemove,
+  onMove,
+}: {
+  index: number;
+  total: number;
+  lang: Lang;
+  slide: SlideData;
+  onPatch: (p: Partial<SlideData>) => void;
+  onRemove: () => void;
+  onMove: (dir: -1 | 1) => void;
+}) {
+  const t = UI[lang];
+  const [pointsMode, setPointsMode] = useState(!!slide.points);
+
+  const switchType = (type: SlideType) => {
+    const seed: Partial<SlideData> = { type };
+    if (type === "stats" && !slide.stats?.length) seed.stats = [{ value: "", label: "" }];
+    if (type === "list" && !slide.items?.length) seed.items = [""];
+    if (type === "checklist" && !slide.items?.length) seed.items = [""];
+    if (type === "process" && !slide.steps?.length) seed.steps = [{ title: "" }];
+    if (type === "comparison" && !slide.leftItems?.length) seed.leftItems = [""];
+    onPatch({ ...seed, points: type === "body" && pointsMode ? slide.points : undefined });
+  };
+
+  const hasTitle = ["body", "stats", "list", "checklist", "process", "comparison", "image", "emoji", "number"].includes(slide.type);
+  const showCommon = slide.type !== "emoji";
+
+  return (
+    <Card>
+      {/* header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        <div
+          style={{
+            background: "#26262b",
+            color: "#c7c7cf",
+            fontSize: 11,
+            fontWeight: 700,
+            borderRadius: 6,
+            padding: "4px 8px",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {index + 1}/{total}
+        </div>
+        <div style={{ width: 150 }}>
+          <SelectInput value={slide.type} onChange={(e) => switchType(e.target.value as SlideType)}>
+            {TYPE_OPTIONS.map((tp) => (
+              <option key={tp} value={tp}>{tp}</option>
+            ))}
+          </SelectInput>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+          <Btn variant="ghost" onClick={() => onMove(-1)} disabled={index === 0} style={{ padding: "6px 10px" }}>{t.moveUp}</Btn>
+          <Btn variant="ghost" onClick={() => onMove(1)} disabled={index === total - 1} style={{ padding: "6px 10px" }}>{t.moveDown}</Btn>
+          <Btn variant="danger" onClick={onRemove} style={{ padding: "6px 10px" }}>{t.remove}</Btn>
+        </div>
+      </div>
+
+      {/* common */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 12 }}>
+        {showCommon && (
+          <Field label={t.lblBadge}>
+            <TextInput value={slide.badge ?? ""} maxLength={4} onChange={(e) => onPatch({ badge: e.target.value })}
+              style={{ textTransform: "uppercase" }} />
+          </Field>
+        )}
+        <Field label={t.lblHighlight}>
+          <TextInput value={slide.highlight ?? ""} onChange={(e) => onPatch({ highlight: e.target.value })} />
+        </Field>
+        <Field label={t.lblHighlightStyle}>
+          <SelectInput
+            value={slide.highlightStyle ?? "default"}
+            onChange={(e) => onPatch({ highlightStyle: e.target.value === "italic-box" ? "italic-box" : "default" })}
+          >
+            <option value="default">{t.hlDefault}</option>
+            <option value="italic-box">{t.hlItalicBox}</option>
+          </SelectInput>
+        </Field>
+      </div>
+
+      {/* type-specific fields */}
+      {hasTitle && (
+        <div style={{ marginBottom: 12 }}>
+          <Field label={t.lblTitle}>
+            <TextInput value={slide.title ?? ""} onChange={(e) => onPatch({ title: e.target.value })} />
+          </Field>
+        </div>
+      )}
+
+      {slide.type === "hook" && (
+        <Field label={t.lblText}>
+          <Area rows={3} value={slide.text ?? ""} onChange={(e) => onPatch({ text: e.target.value })} />
+        </Field>
+      )}
+
+      {slide.type === "body" && (
+        <>
+          <div style={{ marginBottom: 12 }}>
+            <Field label={t.lblBodyKind}>
+              <SelectInput
+                value={pointsMode ? "points" : "paragraph"}
+                onChange={(e) => {
+                  const m = e.target.value === "points";
+                  setPointsMode(m);
+                  onPatch(m ? { points: slide.points ?? [{ type: "plus", text: "" }], text: undefined }
+                          : { points: undefined });
+                }}
+              >
+                <option value="paragraph">{t.bodyParagraph}</option>
+                <option value="points">{t.bodyPoints}</option>
+              </SelectInput>
+            </Field>
+          </div>
+          {pointsMode ? (
+            <PointsEditor points={slide.points} onChange={(points) => onPatch({ points })} lang={lang} />
+          ) : (
+            <Field label={t.lblText}>
+              <Area rows={3} value={slide.text ?? ""} onChange={(e) => onPatch({ text: e.target.value })} />
+            </Field>
+          )}
+        </>
+      )}
+
+      {slide.type === "cta" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Field label={t.lblText}>
+            <Area rows={3} value={slide.text ?? ""} onChange={(e) => onPatch({ text: e.target.value })} />
+          </Field>
+          <Field label={t.lblHandle}>
+            <TextInput value={slide.handle ?? ""} onChange={(e) => onPatch({ handle: e.target.value })} placeholder="@username" />
+          </Field>
+        </div>
+      )}
+
+      {slide.type === "quote" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Field label={t.lblText}>
+            <Area rows={3} value={slide.text ?? ""} onChange={(e) => onPatch({ text: e.target.value })} />
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label={t.lblAuthor}>
+              <TextInput value={slide.author ?? ""} onChange={(e) => onPatch({ author: e.target.value })} />
+            </Field>
+            <Field label={t.lblRole}>
+              <TextInput value={slide.role ?? ""} onChange={(e) => onPatch({ role: e.target.value })} />
+            </Field>
+          </div>
+        </div>
+      )}
+
+      {(slide.type === "list" || slide.type === "checklist") && (
+        <Field label={t.lblItems}>
+          <Area rows={Math.max(3, (slide.items?.length ?? 1))} value={(slide.items ?? []).join("\n")}
+            onChange={(e) => onPatch({ items: linesFrom(e.target.value) })} />
+        </Field>
+      )}
+
+      {slide.type === "stats" && (
+        <StatsEditor stats={slide.stats} onChange={(stats) => onPatch({ stats })} lang={lang} />
+      )}
+
+      {slide.type === "process" && (
+        <StepsEditor steps={slide.steps} onChange={(steps) => onPatch({ steps })} lang={lang} />
+      )}
+
+      {slide.type === "comparison" && (
+        <ComparisonEditor slide={slide} onPatch={onPatch} lang={lang} />
+      )}
+
+      {slide.type === "image" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Field label={t.lblImageSrc}>
+            <TextInput value={slide.imageSrc ?? ""} onChange={(e) => onPatch({ imageSrc: e.target.value })} placeholder="/images/your-file.png" />
+          </Field>
+          <Field label={t.lblCaption}>
+            <TextInput value={slide.imageCaption ?? ""} onChange={(e) => onPatch({ imageCaption: e.target.value })} />
+          </Field>
+        </div>
+      )}
+
+      {slide.type === "emoji" && (
+        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 12 }}>
+          <Field label={t.lblEmoji}>
+            <TextInput value={slide.emoji ?? ""} onChange={(e) => onPatch({ emoji: e.target.value })} placeholder="🚀" />
+          </Field>
+          <Field label={t.lblText}>
+            <TextInput value={slide.text ?? ""} onChange={(e) => onPatch({ text: e.target.value })} />
+          </Field>
+        </div>
+      )}
+
+      {slide.type === "number" && (
+        <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12 }}>
+          <Field label={t.lblBigNumber}>
+            <TextInput value={slide.bigNumber ?? ""} onChange={(e) => onPatch({ bigNumber: e.target.value })} placeholder="10x" />
+          </Field>
+          <Field label={t.lblText}>
+            <TextInput value={slide.text ?? ""} onChange={(e) => onPatch({ text: e.target.value })} />
+          </Field>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function PointsEditor({
+  points,
+  onChange,
+  lang,
+}: {
+  points: Array<{ type: "plus" | "minus"; text: string }> | undefined;
+  onChange: (p: Array<{ type: "plus" | "minus"; text: string }>) => void;
+  lang: Lang;
+}) {
+  const t = UI[lang];
+  const list = points ?? [];
+  const set = (i: number, p: Partial<{ type: "plus" | "minus"; text: string }>) =>
+    onChange(list.map((x, idx) => (idx === i ? { ...x, ...p } : x)));
+  return (
+    <Field label={t.lblText}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {list.map((p, i) => (
+          <div key={i} style={{ display: "flex", gap: 8 }}>
+            <div style={{ width: 110, flexShrink: 0 }}>
+              <SelectInput value={p.type} onChange={(e) => set(i, { type: e.target.value as "plus" | "minus" })}>
+                <option value="plus">+ plus</option>
+                <option value="minus">− minus</option>
+              </SelectInput>
+            </div>
+            <TextInput value={p.text} onChange={(e) => set(i, { text: e.target.value })} />
+            <Btn variant="danger" onClick={() => onChange(list.filter((_, idx) => idx !== i))} style={{ padding: "6px 10px" }}>✕</Btn>
+          </div>
+        ))}
+        <div>
+          <Btn variant="ghost" onClick={() => onChange([...list, { type: "plus", text: "" }])}>{t.addItem}</Btn>
+        </div>
+      </div>
+    </Field>
+  );
+}
+
+function StatsEditor({
+  stats,
+  onChange,
+  lang,
+}: {
+  stats: Array<{ value: string; label: string }> | undefined;
+  onChange: (s: Array<{ value: string; label: string }>) => void;
+  lang: Lang;
+}) {
+  const t = UI[lang];
+  const list = stats ?? [];
+  return (
+    <Field label={t.lblStats}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {list.map((s, i) => (
+          <div key={i} style={{ display: "flex", gap: 8 }}>
+            <TextInput value={s.value} placeholder={t.lblValue} style={{ width: 160, flexShrink: 0 }}
+              onChange={(e) => onChange(list.map((x, idx) => (idx === i ? { ...x, value: e.target.value } : x)))} />
+            <TextInput value={s.label} placeholder={t.lblLabel}
+              onChange={(e) => onChange(list.map((x, idx) => (idx === i ? { ...x, label: e.target.value } : x)))} />
+            <Btn variant="danger" onClick={() => onChange(list.filter((_, idx) => idx !== i))} style={{ padding: "6px 10px" }}>✕</Btn>
+          </div>
+        ))}
+        <div>
+          <Btn variant="ghost" onClick={() => onChange([...list, { value: "", label: "" }])}>{t.addItem}</Btn>
+        </div>
+      </div>
+    </Field>
+  );
+}
+
+function StepsEditor({
+  steps,
+  onChange,
+  lang,
+}: {
+  steps: Array<{ title: string; text?: string }> | undefined;
+  onChange: (s: Array<{ title: string; text?: string }>) => void;
+  lang: Lang;
+}) {
+  const t = UI[lang];
+  const list = steps ?? [];
+  return (
+    <Field label={t.lblSteps}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {list.map((s, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <TextInput value={s.title} placeholder={t.lblStepTitle} style={{ flex: 1 }}
+              onChange={(e) => onChange(list.map((x, idx) => (idx === i ? { ...x, title: e.target.value } : x)))} />
+            <TextInput value={s.text ?? ""} placeholder={t.lblStepText} style={{ flex: 1 }}
+              onChange={(e) => onChange(list.map((x, idx) => (idx === i ? { ...x, text: e.target.value } : x)))} />
+            <Btn variant="danger" onClick={() => onChange(list.filter((_, idx) => idx !== i))} style={{ padding: "6px 10px" }}>✕</Btn>
+          </div>
+        ))}
+        <div>
+          <Btn variant="ghost" onClick={() => onChange([...list, { title: "" }])}>{t.addItem}</Btn>
+        </div>
+      </div>
+    </Field>
+  );
+}
+
+function ComparisonEditor({
+  slide,
+  onPatch,
+  lang,
+}: {
+  slide: SlideData;
+  onPatch: (p: Partial<SlideData>) => void;
+  lang: Lang;
+}) {
+  const t = UI[lang];
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <Field label={t.lblLeftLabel}>
+        <TextInput value={slide.leftLabel ?? ""} onChange={(e) => onPatch({ leftLabel: e.target.value })} />
+      </Field>
+      <Field label={t.lblRightLabel}>
+        <TextInput value={slide.rightLabel ?? ""} onChange={(e) => onPatch({ rightLabel: e.target.value })} />
+      </Field>
+      <Field label={t.lblLeftItems}>
+        <Area rows={4} value={(slide.leftItems ?? []).join("\n")}
+          onChange={(e) => onPatch({ leftItems: linesFrom(e.target.value) })} />
+      </Field>
+      <Field label={t.lblRightItems}>
+        <Area rows={4} value={(slide.rightItems ?? []).join("\n")}
+          onChange={(e) => onPatch({ rightItems: linesFrom(e.target.value) })} />
+      </Field>
+    </div>
+  );
+}
