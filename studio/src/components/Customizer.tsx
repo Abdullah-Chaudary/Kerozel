@@ -447,6 +447,7 @@ export default function Customizer({
   const [addingSurface, setAddingSurface] = useState<"solid" | "gradient" | "image" | null>(null);
   const [presets, setPresets] = useState<SavedPreset[]>(() => loadPresets());
   const [presetName, setPresetName] = useState("");
+  const [activeId, setActiveId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [surfaceName, setSurfaceName] = useState("");
   const [solidColor, setSolidColor] = useState("#1a1a2e");
@@ -466,6 +467,11 @@ export default function Customizer({
 
   const t = data.typo;
   const set = (patch: Partial<CustomData>) => onChange({ ...data, ...patch });
+
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const axesRef = useRef(axes);
+  axesRef.current = axes;
 
   const updateFonts = (fonts: CustomFont[]) => set({ fonts });
   const updateSurfaces = (surfaces: CustomSurface[]) => set({ surfaces });
@@ -560,6 +566,15 @@ export default function Customizer({
   };
 
   const deletePreset = (id: string) => persistPresets(presets.filter((p) => p.id !== id));
+
+  const loadPreset = (p: SavedPreset) => {
+    onApply(p);
+    setActiveId(p.id);
+  };
+
+  const updatePreset = (p: SavedPreset) => {
+    persistPresets(presets.map((x) => (x.id === p.id ? { ...x, data: dataRef.current, axes: axesRef.current, savedAt: Date.now() } : x)));
+  };
 
   const downloadPresets = () => {
     if (presets.length === 0) return;
@@ -659,28 +674,57 @@ export default function Customizer({
           <div style={{ fontSize: 11, color: "#777", lineHeight: 1.5 }}>
             A preset captures everything — custom fonts, backgrounds, accents, decor layers, logo, typography, and the currently selected font / surface / accent / mode / format / decor.
           </div>
+          <div style={{ fontSize: 11, color: "#6b6b72", lineHeight: 1.5 }}>
+            To edit a saved preset: press <b>Load</b>, change its background / accent / anything in this panel, then press <b>Update</b> to overwrite it.
+          </div>
           {presets.length === 0 && (
             <div style={{ fontSize: 11, color: "#777" }}>No saved presets yet — name one above and hit “Save current preset”.</div>
           )}
-          {presets.map((p) => (
-            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid #26262a", borderRadius: 10, padding: "8px 12px" }}>
-              <span style={{ flex: 1, fontSize: 12, color: "#eee", minWidth: 0 }}>
-                {p.name}
-                <span style={{ fontSize: 10, color: "#6a6a72", marginLeft: 8 }}>
-                  {new Date(p.savedAt).toLocaleString()}
-                </span>
-              </span>
-              <button
-                onClick={() => onApply(p)}
-                style={{ ...btn, padding: "4px 10px", fontSize: 11, background: "#22C55E", borderColor: "#22C55E", color: "#fff" }}
+          {presets.map((p) => {
+            const isActive = activeId === p.id;
+            return (
+              <div
+                key={p.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  border: isActive ? "1px solid #A78BFA" : "1px solid #26262a",
+                  borderRadius: 10,
+                  padding: "8px 12px",
+                  background: isActive ? "rgba(167,139,250,0.08)" : "transparent",
+                }}
               >
-                Load
-              </button>
-              <button onClick={() => deletePreset(p.id)} style={{ ...btn, padding: "4px 10px", fontSize: 11, color: "#f87171" }}>
-                Delete
-              </button>
-            </div>
-          ))}
+                <span style={{ flex: 1, fontSize: 12, color: "#eee", minWidth: 0 }}>
+                  {p.name}
+                  {isActive && (
+                    <span style={{ fontSize: 10, color: "#A78BFA", marginLeft: 8 }}>● editing</span>
+                  )}
+                  <span style={{ fontSize: 10, color: "#6a6a72", marginLeft: 8 }}>
+                    {new Date(p.savedAt).toLocaleString()}
+                  </span>
+                </span>
+                <button
+                  onClick={() => loadPreset(p)}
+                  style={{ ...btn, padding: "4px 10px", fontSize: 11, background: "#22C55E", borderColor: "#22C55E", color: "#fff" }}
+                >
+                  Load
+                </button>
+                {isActive && (
+                  <button
+                    onClick={() => updatePreset(p)}
+                    title="Overwrite this preset with the current settings"
+                    style={{ ...btn, padding: "4px 10px", fontSize: 11, background: "#6366F1", borderColor: "#6366F1", color: "#fff" }}
+                  >
+                    Update
+                  </button>
+                )}
+                <button onClick={() => deletePreset(p.id)} style={{ ...btn, padding: "4px 10px", fontSize: 11, color: "#f87171" }}>
+                  Delete
+                </button>
+              </div>
+            );
+          })}
         </Section>
 
         {/* ---------- Typography ---------- */}
