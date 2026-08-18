@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { SlideData, SlideType } from "../lib/types";
+import type { SlideData, SlideType, SlideSvg, BlendMode } from "../lib/types";
 import type { Lang } from "../lib/strings";
 import { UI } from "../lib/strings";
+import { BLEND_MODES, BLEND_LABELS } from "../lib/custom";
 import { Area, Btn, Card, Field, SelectInput, TextInput } from "./ui";
 
 const TYPE_OPTIONS: SlideType[] = [
@@ -302,7 +303,144 @@ function SlideCard({
           </Field>
         </div>
       )}
+
+      {/* per-slide SVG background */}
+      <div style={{ marginTop: 16, borderTop: "1px solid #2a2a2e", paddingTop: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#c7c7cf" }}>{t.svgTitle}</span>
+          <span style={{ fontSize: 11, color: "#6b6b72" }}>
+            {slide.svg ? (slide.svg.enabled ? "· " + t.svgEnabled : "· " + t.svgHide) : ""}
+          </span>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+            {slide.svg ? (
+              <Btn variant="danger" onClick={() => onPatch({ svg: undefined })} style={{ padding: "6px 10px" }}>{t.svgRemove}</Btn>
+            ) : (
+              <Btn variant="ghost" onClick={() => onPatch({ svg: defaultSvg() })} style={{ padding: "6px 10px" }}>{t.svgAdd}</Btn>
+            )}
+          </div>
+        </div>
+        {slide.svg && <SvgFields svg={slide.svg} onPatch={(p) => onPatch({ svg: { ...slide.svg!, ...p } })} lang={lang} />}
+      </div>
     </Card>
+  );
+}
+
+function clampNum(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+function defaultSvg(): SlideSvg {
+  return {
+    code: '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40" fill="currentColor" opacity="0.5"/></svg>',
+    x: 85,
+    y: 15,
+    scale: 0.5,
+    opacity: 0.3,
+    rotate: 0,
+    color: "",
+    recolor: true,
+    blend: "normal",
+    enabled: true,
+  };
+}
+
+function SvgFields({
+  svg,
+  onPatch,
+  lang,
+}: {
+  svg: SlideSvg;
+  onPatch: (p: Partial<SlideSvg>) => void;
+  lang: Lang;
+}) {
+  const t = UI[lang];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div
+          style={{
+            width: 92,
+            height: 92,
+            flexShrink: 0,
+            borderRadius: 8,
+            border: "1px solid #333",
+            background: "#0f0f11",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+        >
+          {svg.code ? (
+            <div
+              style={{
+                width: 80 * Math.min(Math.max(svg.scale, 0.2), 1.5),
+                height: 80 * Math.min(Math.max(svg.scale, 0.2), 1.5),
+                color: svg.color || "#FACC15",
+                opacity: svg.opacity,
+                transform: `rotate(${svg.rotate ?? 0}deg)`,
+              }}
+            >
+              <div dangerouslySetInnerHTML={{ __html: svg.code }} style={{ width: "100%", height: "100%" }} />
+            </div>
+          ) : (
+            <span style={{ fontSize: 11, color: "#6b6b72" }}>—</span>
+          )}
+        </div>
+        <Field label={t.svgCode} style={{ flex: 1, minWidth: 0 }}>
+          <Area
+            rows={4}
+            value={svg.code}
+            onChange={(e) => onPatch({ code: e.target.value })}
+            placeholder={t.svgCodePh}
+            style={{ fontFamily: "ui-monospace, monospace", fontSize: 11 }}
+          />
+        </Field>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <Field label={t.svgX}>
+          <TextInput type="number" min={0} max={100} value={svg.x} onChange={(e) => onPatch({ x: clampNum(Number(e.target.value), 0, 100) })} />
+        </Field>
+        <Field label={t.svgY}>
+          <TextInput type="number" min={0} max={100} value={svg.y} onChange={(e) => onPatch({ y: clampNum(Number(e.target.value), 0, 100) })} />
+        </Field>
+        <Field label={t.svgSize} hint={t.svgScaleHint}>
+          <TextInput type="number" min={0.1} max={3} step={0.1} value={svg.scale} onChange={(e) => onPatch({ scale: clampNum(Number(e.target.value), 0.1, 3) })} />
+        </Field>
+        <Field label={t.svgOpacity}>
+          <TextInput type="number" min={0} max={1} step={0.05} value={svg.opacity} onChange={(e) => onPatch({ opacity: clampNum(Number(e.target.value), 0, 1) })} />
+        </Field>
+        <Field label={t.svgRotate}>
+          <TextInput type="number" min={-360} max={360} value={svg.rotate ?? 0} onChange={(e) => onPatch({ rotate: clampNum(Number(e.target.value), -360, 360) })} />
+        </Field>
+        <Field label={t.svgBlend}>
+          <SelectInput value={svg.blend ?? "normal"} onChange={(e) => onPatch({ blend: e.target.value as BlendMode })}>
+            {BLEND_MODES.map((b) => (
+              <option key={b} value={b}>{BLEND_LABELS[b]}</option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label={t.svgColor} hint={t.svgColorPh}>
+          <TextInput
+            type="text"
+            value={svg.color ?? ""}
+            placeholder="#FACC15"
+            onChange={(e) => onPatch({ color: e.target.value || undefined })}
+          />
+        </Field>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <label style={{ fontSize: 12, color: "#c7c7cf", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!svg.recolor} onChange={(e) => onPatch({ recolor: e.target.checked })} />
+          {t.svgRecolor}
+        </label>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <Btn variant="ghost" onClick={() => onPatch({ enabled: !svg.enabled })} style={{ padding: "6px 10px" }}>
+            {svg.enabled ? t.svgHide : t.svgShow}
+          </Btn>
+        </div>
+      </div>
+    </div>
   );
 }
 

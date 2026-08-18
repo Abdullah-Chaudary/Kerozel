@@ -2,17 +2,23 @@
 
 import { useRef, useState } from "react";
 import type {
+  AccentOverride,
   BlendMode,
+  BgKind,
   BgType,
   CustomAccent,
   CustomData,
   CustomFont,
   CustomSurface,
   DecorLayer,
+  DecorOverride,
+  SurfaceOverride,
   TextAlign,
 } from "../lib/types";
-import { BLEND_LABELS, BLEND_MODES, defaultTypo, uid, loadPresets, savePresets } from "../lib/custom";
+import { BLEND_LABELS, BLEND_MODES, defaultTypo, uid, loadPresets, savePresets, applySurfaceOverride, applyAccentOverride } from "../lib/custom";
 import type { PresetAxes, SavedPreset } from "../lib/custom";
+import { SURFACES, ACCENTS } from "../lib/presets";
+import type { SurfaceId, AccentId } from "../lib/types";
 import GradientEditor, { ColorField, Slider } from "./GradientEditor";
 
 // ============================================================
@@ -187,6 +193,234 @@ function readFileAsDataUrl(file: File): Promise<string> {
     r.onerror = reject;
     r.readAsDataURL(file);
   });
+}
+
+// ============================================================
+// Edit built-in presets (surfaces / accents / decorations)
+// Overrides are stored in CustomData and merged over the stock
+// definitions at render time.
+// ============================================================
+
+const BUILTIN_SURFACE_IDS = Object.keys(SURFACES) as SurfaceId[];
+const BUILTIN_ACCENT_IDS = Object.keys(ACCENTS) as AccentId[];
+
+function surfaceSwatch(s: ReturnType<typeof applySurfaceOverride>): string {
+  return s.bgImage ? `url(${s.bgImage.url}) center/cover` : s.bgGradient ?? s.bg;
+}
+
+function EditBuiltins({ data, onChange }: { data: CustomData; onChange: (d: CustomData) => void }) {
+  const [openSurface, setOpenSurface] = useState<string | null>(null);
+  const builtinImgRef = useRef<HTMLInputElement>(null);
+
+  const setSurfO = (id: string, o: SurfaceOverride) =>
+    onChange({ ...data, surfaceOverrides: { ...(data.surfaceOverrides ?? {}), [id]: { ...(data.surfaceOverrides?.[id] ?? {}), ...o } } });
+  const clearSurfO = (id: string) => {
+    const next = { ...(data.surfaceOverrides ?? {}) };
+    delete next[id];
+    onChange({ ...data, surfaceOverrides: next });
+  };
+  const setAccO = (id: string, o: AccentOverride) =>
+    onChange({ ...data, accentOverrides: { ...(data.accentOverrides ?? {}), [id]: { ...(data.accentOverrides?.[id] ?? {}), ...o } } });
+  const clearAccO = (id: string) => {
+    const next = { ...(data.accentOverrides ?? {}) };
+    delete next[id];
+    onChange({ ...data, accentOverrides: next });
+  };
+  const setDecO = (id: string, o: DecorOverride) =>
+    onChange({ ...data, decorOverrides: { ...(data.decorOverrides ?? {}), [id]: { ...(data.decorOverrides?.[id] ?? {}), ...o } } });
+  const clearDecO = (id: string) => {
+    const next = { ...(data.decorOverrides ?? {}) };
+    delete next[id];
+    onChange({ ...data, decorOverrides: next });
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* ---------- built-in surfaces ---------- */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9a9aa3", marginBottom: 8 }}>
+          Backgrounds (stock, editable)
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {BUILTIN_SURFACE_IDS.map((id) => {
+            const s = SURFACES[id];
+            const o = data.surfaceOverrides?.[id];
+            const eff = applySurfaceOverride(s, o);
+            const isOpen = openSurface === id;
+            const kind = o?.kind ?? (s.bgGradient ? "gradient" : s.bgImage ? "image" : "solid");
+            return (
+              <div key={id} style={{ border: "1px solid #26262a", borderRadius: 10, padding: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 8, background: surfaceSwatch(eff), border: "1px solid #333", flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 12, color: "#eee", minWidth: 0 }}>{eff.name}</span>
+                  {o?.hidden && <span style={{ fontSize: 10, color: "#f87171" }}>hidden</span>}
+                  <button onClick={() => setOpenSurface(isOpen ? null : id)} style={{ ...btn, padding: "4px 10px", fontSize: 11 }}>
+                    {isOpen ? "Close" : "Edit"}
+                  </button>
+                  <button onClick={() => clearSurfO(id)} style={{ ...btn, padding: "4px 10px", fontSize: 11, color: "#f87171" }}>Reset</button>
+                </div>
+                {isOpen && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10, borderTop: "1px solid #2a2a2e", paddingTop: 10 }}>
+                    <Row labelText="Name">
+                      <input value={o?.name ?? s.name} onChange={(e) => setSurfO(id, { name: e.target.value })} style={{ ...inp, flex: 1, minWidth: 0 }} />
+                    </Row>
+                    <Row labelText="Kind">
+                      <Seg
+                        value={kind}
+                        options={[
+                          { v: "solid", label: "Solid" },
+                          { v: "gradient", label: "Gradient" },
+                          { v: "image", label: "Image" },
+                        ]}
+                        onChange={(k) => setSurfO(id, { kind: k as BgKind })}
+                      />
+                    </Row>
+                    {kind === "solid" && (
+                      <Row labelText="Color">
+                        <ColorField value={o?.color ?? (s.bgGradient || s.bgImage ? "#0a0a0a" : s.bg)} onChange={(c) => setSurfO(id, { kind: "solid", color: c })} />
+                      </Row>
+                    )}
+                    {kind === "gradient" && (
+                      <>
+                        <GradientEditor
+                          value={o?.gradient ?? (s.bgGradient || "linear-gradient(135deg, #1a1a2e 0%, #6366F1 100%)")}
+                          onChange={(g) => setSurfO(id, { kind: "gradient", gradient: g })}
+                        />
+                        <Row labelText="Fallback">
+                          <ColorField value={o?.color ?? s.bg} onChange={(c) => setSurfO(id, { color: c })} />
+                        </Row>
+                      </>
+                    )}
+                    {kind === "image" && (
+                      <>
+                        <Row labelText="Image">
+                          <button onClick={() => builtinImgRef.current?.click()} style={btn}>
+                            {o?.imageData ? "Change image" : "Upload image"}
+                          </button>
+                        </Row>
+                        <input
+                          ref={builtinImgRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (f) setSurfO(id, { kind: "image", imageData: await readFileAsDataUrl(f) });
+                            e.target.value = "";
+                          }}
+                        />
+                        {o?.imageData && (
+                          <img src={o.imageData} alt="bg preview" style={{ width: "100%", maxHeight: 120, objectFit: "cover", borderRadius: 8 }} />
+                        )}
+                        <Row labelText="Tint">
+                          <ColorField value={o?.overlayColor ?? "#000000"} onChange={(c) => setSurfO(id, { overlayColor: c })} />
+                        </Row>
+                        <Row labelText="Tint op">
+                          <Slider value={o?.overlayOpacity ?? 0.3} min={0} max={1} onChange={(v) => setSurfO(id, { overlayOpacity: v })} />
+                          <Value width={34}>{Math.round((o?.overlayOpacity ?? 0.3) * 100)}%</Value>
+                        </Row>
+                        <Row labelText="Blend">
+                          <BlendSel value={o?.blendMode ?? "normal"} onChange={(v) => setSurfO(id, { blendMode: v })} />
+                        </Row>
+                      </>
+                    )}
+                    <Row labelText="Text color">
+                      <ColorField value={o?.textColor ?? s.textColor} onChange={(c) => setSurfO(id, { textColor: c })} />
+                    </Row>
+                    <Row labelText="Text 2">
+                      <input
+                        type="text"
+                        value={o?.textSecondary ?? s.textSecondary}
+                        onChange={(e) => setSurfO(id, { textSecondary: e.target.value })}
+                        placeholder="rgba(255,255,255,0.55)"
+                        style={{ ...inp, flex: 1, minWidth: 0, fontFamily: "ui-monospace, monospace", fontSize: 11 }}
+                      />
+                    </Row>
+                    <Row labelText="Accent">
+                      <ColorField value={o?.accentColor ?? s.accentColor} onChange={(c) => setSurfO(id, { accentColor: c })} />
+                    </Row>
+                    <Row labelText="Visible">
+                      <Seg
+                        value={o?.hidden ? "hide" : "show"}
+                        options={[{ v: "show", label: "Show" }, { v: "hide", label: "Hide" }]}
+                        onChange={(v) => setSurfO(id, { hidden: v === "hide" })}
+                      />
+                    </Row>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ---------- built-in accents ---------- */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9a9aa3", marginBottom: 8 }}>
+          Accents (stock, editable)
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {BUILTIN_ACCENT_IDS.map((id) => {
+            const a = ACCENTS[id];
+            const o = data.accentOverrides?.[id];
+            const eff = applyAccentOverride(a, o);
+            return (
+              <div key={id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 7, background: eff.color, border: "1px solid #333", flexShrink: 0 }} />
+                <input value={o?.name ?? a.name} onChange={(e) => setAccO(id, { name: e.target.value })} style={{ ...inp, flex: 1, minWidth: 0 }} />
+                <ColorField value={o?.color ?? a.color} onChange={(c) => setAccO(id, { color: c })} />
+                <button onClick={() => setAccO(id, { hidden: !o?.hidden })} style={{ ...btn, padding: "4px 10px", fontSize: 11, color: o?.hidden ? "#f87171" : "#4ade80" }}>
+                  {o?.hidden ? "Hidden" : "Visible"}
+                </button>
+                <button onClick={() => clearAccO(id)} style={{ ...btn, padding: "4px 10px", fontSize: 11, color: "#888" }}>Reset</button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ---------- built-in decorations ---------- */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9a9aa3", marginBottom: 8 }}>
+          Decorations (stock, editable)
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {DECOR_TYPES.map((bg) => {
+            const o = data.decorOverrides?.[bg];
+            return (
+              <div key={bg} style={{ border: "1px solid #26262a", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ flex: 1, fontSize: 12, color: "#eee" }}>{DECOR_LABELS[bg]}</span>
+                  <button onClick={() => setDecO(bg, { enabled: o?.enabled === false ? true : false })} style={{ ...btn, padding: "4px 10px", fontSize: 11, color: o?.enabled === false ? "#f87171" : "#4ade80" }}>
+                    {o?.enabled === false ? "Hidden" : "Visible"}
+                  </button>
+                  <button onClick={() => clearDecO(bg)} style={{ ...btn, padding: "4px 10px", fontSize: 11, color: "#888" }}>Reset</button>
+                </div>
+                <Row labelText="Color">
+                  <input
+                    type="text"
+                    value={o?.color ?? ""}
+                    placeholder="= theme accent"
+                    onChange={(e) => setDecO(bg, { color: e.target.value || undefined })}
+                    style={{ ...inp, flex: 1, minWidth: 0, fontFamily: "ui-monospace, monospace", fontSize: 11 }}
+                  />
+                  <ColorField value={o?.color ?? "#FACC15"} onChange={(c) => setDecO(bg, { color: c })} />
+                </Row>
+                <Row labelText="Opacity">
+                  <Slider value={o?.opacity ?? 1} min={0} max={1} onChange={(v) => setDecO(bg, { opacity: v })} />
+                  <Value width={34}>{Math.round((o?.opacity ?? 1) * 100)}%</Value>
+                </Row>
+                <Row labelText="Size">
+                  <Slider value={o?.size ?? 1} min={0.1} max={3} step={0.1} onChange={(v) => setDecO(bg, { size: v })} />
+                  <Value width={40}>{Number((o?.size ?? 1).toFixed(2))}×</Value>
+                </Row>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ============================================================
@@ -895,6 +1129,11 @@ export default function Customizer({
               onChange={(v) => setLogo({ everySlide: v === "every" })}
             />
           </Row>
+        </Section>
+
+        {/* ---------- Edit built-in presets ---------- */}
+        <Section wide title="Edit built-in presets">
+          <EditBuiltins data={data} onChange={onChange} />
         </Section>
       </div>
     </div>

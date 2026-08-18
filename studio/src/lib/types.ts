@@ -106,6 +106,29 @@ export interface Accent {
 
 // ---- Slide data ----
 
+/** A single decorative SVG placed in the background of one slide. */
+export interface SlideSvg {
+  /** Raw inline SVG markup (a full `<svg viewBox="0 0 100 100">…</svg>`). */
+  code: string;
+  /** Horizontal anchor, percent of canvas width (center of the box). */
+  x: number;
+  /** Vertical anchor, percent of canvas height (center of the box). */
+  y: number;
+  /** Scale factor (0.1–3) relative to half of the smaller canvas edge. */
+  scale: number;
+  /** Opacity 0–1. */
+  opacity: number;
+  /** Rotation in degrees. */
+  rotate?: number;
+  /** Optional recolor — when empty the theme accent color is used. */
+  color?: string;
+  /** Force-tint every shape in the SVG to `color` (overrides hardcoded fills). */
+  recolor?: boolean;
+  /** Blend mode. */
+  blend?: BlendMode;
+  enabled: boolean;
+}
+
 export interface SlideData {
   type: SlideType;
   text?: string;
@@ -138,6 +161,8 @@ export interface SlideData {
   bigNumber?: string;
   // highlight variant — "italic-box" renders highlighted word in Playfair italic on colored box
   highlightStyle?: "default" | "italic-box";
+  // per-slide decorative SVG placed in the background (AI-generated or user-added)
+  svg?: SlideSvg;
   // ---- per-slide text overrides (optional, applied on top of global typography) ----
   align?: TextAlign;
   textColor?: string;
@@ -257,6 +282,44 @@ export interface CustomAccent {
   color: string;
 }
 
+/** Edits applied on top of a built-in surface (dark / white / …). */
+export interface SurfaceOverride {
+  name?: string;
+  kind?: BgKind;
+  /** solid kind */
+  color?: string;
+  /** gradient kind */
+  gradient?: string;
+  /** image kind */
+  imageData?: string;
+  blendMode?: BlendMode;
+  overlayColor?: string;
+  overlayOpacity?: number;
+  textColor?: string;
+  textSecondary?: string;
+  accentColor?: string;
+  /** hide the surface from the Surface menu */
+  hidden?: boolean;
+}
+
+/** Edits applied on top of a built-in accent (yellow / red / …). */
+export interface AccentOverride {
+  name?: string;
+  color?: string;
+  /** hide the accent from the Accent menu */
+  hidden?: boolean;
+}
+
+/** Edits applied on top of a built-in background decoration (blobs / grid / …). */
+export interface DecorOverride {
+  /** overrides the accent color the decoration is drawn with */
+  color?: string;
+  opacity?: number;
+  size?: number;
+  /** hide the decoration from the Background menu */
+  enabled?: boolean;
+}
+
 /** A single decoration layer, stackable with others. */
 export interface DecorLayer {
   id: string;
@@ -309,4 +372,10 @@ export interface CustomData {
   decors: DecorLayer[];
   logo: LogoConfig;
   typo: TypographyConfig;
+  /** edits applied to built-in surfaces, keyed by built-in id */
+  surfaceOverrides?: Record<string, SurfaceOverride>;
+  /** edits applied to built-in accents, keyed by built-in id */
+  accentOverrides?: Record<string, AccentOverride>;
+  /** edits applied to built-in background decorations, keyed by BgType */
+  decorOverrides?: Record<string, DecorOverride>;
 }

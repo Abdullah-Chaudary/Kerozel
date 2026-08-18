@@ -32,6 +32,13 @@ Each slide object has a "type" and the fields that type uses. Supported types an
 - {"type":"number","bigNumber":"10x","title":"...","text":"..."}   // hero number slide
 - {"type":"emoji","emoji":"🚀","title":"...","text":"..."}          // giant emoji slide
 
+Every slide MUST also include an "svg" object — a small decorative SVG illustration related to that slide's content, drawn in the background:
+- {"svg":{"code":"<svg viewBox=\\"0 0 100 100\\" xmlns=\\"http://www.w3.org/2000/svg\\"><path fill=\\"currentColor\\" d=\\"...\\"/></svg>","x":86,"y":12,"scale":0.45,"opacity":0.18,"color":"","recolor":true}}
+- "code": a complete, self-contained <svg> with a viewBox (recommended 100x100). Keep it SIMPLE and FLAT — max ~6 shapes (paths, circles, rects). Use fill="currentColor" so the app tints it with the brand accent.
+- "x","y": position of the icon center in percent of the canvas (0-100). Put it in an EMPTY CORNER away from the text (top-right is 86/12, bottom-left is 12/88, etc.).
+- "scale": 0.3 to 0.6. "opacity": 0.12 to 0.3 (subtle). "color": leave "" so the theme accent is used. "recolor": true.
+- The icon should be relevant to the slide's content (e.g. a chart for a stats slide, a lightbulb for a tips slide, arrows for a process slide, a heart for a CTA). Never place it near the text block.
+
 Rules:
 - "highlight" must be 1-2 words that exist verbatim in the slide's text or title (exact case-insensitive substring).
 - "badge" is max 4 characters: "01", "TIP", "NEW".

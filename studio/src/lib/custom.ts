@@ -6,6 +6,8 @@
 // ============================================================
 
 import type {
+  Accent,
+  AccentOverride,
   BgKind,
   BlendMode,
   BgType,
@@ -13,10 +15,13 @@ import type {
   CustomFont,
   CustomSurface,
   DecorLayer,
+  DecorOverride,
   FormatId,
   LogoConfig,
   PurposeId,
   StylePreset,
+  Surface,
+  SurfaceOverride,
   TypographyConfig,
 } from "./types";
 
@@ -56,7 +61,11 @@ export function defaultTypo(): TypographyConfig {
 }
 
 export function defaultData(): CustomData {
-  return { fonts: [], surfaces: [], accents: [], decors: [], logo: defaultLogo(), typo: defaultTypo() };
+  return {
+    fonts: [], surfaces: [], accents: [], decors: [],
+    surfaceOverrides: {}, accentOverrides: {}, decorOverrides: {},
+    logo: defaultLogo(), typo: defaultTypo(),
+  };
 }
 
 // ---- persistence ----
@@ -72,6 +81,9 @@ export function loadCustomData(): CustomData {
       surfaces: parsed.surfaces ?? [],
       accents: parsed.accents ?? [],
       decors: parsed.decors ?? [],
+      surfaceOverrides: parsed.surfaceOverrides ?? {},
+      accentOverrides: parsed.accentOverrides ?? {},
+      decorOverrides: parsed.decorOverrides ?? {},
       logo: { ...defaultLogo(), ...(parsed.logo ?? {}) },
       typo: { ...defaultTypo(), ...(parsed.typo ?? {}) },
     };
@@ -251,6 +263,40 @@ export function isCustomSurface(s: { id: string }): boolean {
   return s.id.startsWith("custom-");
 }
 
+// ---- built-in preset overrides ----
+
+/** Apply a built-in surface override on top of the stock surface definition. */
+export function applySurfaceOverride(s: Surface, o: SurfaceOverride | undefined): Surface {
+  if (!o) return s;
+  const next: Surface = {
+    ...s,
+    name: o.name ?? s.name,
+    textColor: o.textColor ?? s.textColor,
+    textSecondary: o.textSecondary ?? s.textSecondary,
+    accentColor: o.accentColor ?? s.accentColor,
+  };
+  if (o.kind === "image" && o.imageData) {
+    next.bg = o.overlayColor ?? "#0a0a0a";
+    next.bgImage = { url: o.imageData, tint: o.overlayColor, blend: o.blendMode };
+    delete next.bgGradient;
+  } else if (o.kind === "gradient" && o.gradient) {
+    next.bg = o.color ?? s.bg;
+    next.bgGradient = o.gradient;
+    delete next.bgImage;
+  } else if (o.color) {
+    next.bg = o.color;
+    delete next.bgGradient;
+    delete next.bgImage;
+  }
+  return next;
+}
+
+/** Apply a built-in accent override on top of the stock accent definition. */
+export function applyAccentOverride(a: Accent, o: AccentOverride | undefined): Accent {
+  if (!o) return a;
+  return { ...a, name: o.name ?? a.name, color: o.color ?? a.color };
+}
+
 // ---- typography ----
 
 /** Apply the global typography config on top of a composed style preset.
@@ -281,4 +327,4 @@ export function decorFill(
   return { color: fallback };
 }
 
-export type { BgKind, CustomSurface, DecorLayer, CustomFont };
+export type { BgKind, CustomSurface, DecorLayer, CustomFont, SurfaceOverride, AccentOverride, DecorOverride };

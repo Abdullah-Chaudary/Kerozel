@@ -4,7 +4,8 @@
 // guarantees the slide list is renderable by the engine.
 // ============================================================
 
-import type { SlideData, SlideType, BgType } from "./types";
+import type { SlideData, SlideType, BgType, SlideSvg, BlendMode } from "./types";
+import { BLEND_MODES } from "./custom";
 
 const VALID_TYPES: SlideType[] = [
   "hook", "body", "cta", "quote", "stats", "list",
@@ -134,6 +135,33 @@ function toSlide(raw: unknown, index: number): SlideData | null {
     if (o.rightLabel) slide.rightLabel = str(o.rightLabel);
     if (Array.isArray(o.leftItems)) slide.leftItems = strArr(o.leftItems);
     if (Array.isArray(o.rightItems)) slide.rightItems = strArr(o.rightItems);
+  }
+
+  // per-slide decorative SVG
+  if (o.svg && typeof o.svg === "object") {
+    const so = o.svg as Record<string, unknown>;
+    const code = str(so.code);
+    if (code) {
+      const clampNum = (v: unknown, lo: number, hi: number, def: number): number => {
+        const n = num(v);
+        if (n === undefined) return def;
+        return Math.min(hi, Math.max(lo, n));
+      };
+      const svg: SlideSvg = {
+        code,
+        x: clampNum(so.x, 0, 100, 84),
+        y: clampNum(so.y, 0, 100, 14),
+        scale: clampNum(so.scale, 0.1, 3, 0.4),
+        opacity: clampNum(so.opacity, 0, 1, 0.2),
+        rotate: clampNum(so.rotate, -360, 360, 0),
+        color: str(so.color) ?? "",
+        recolor: so.recolor === true,
+        enabled: so.enabled !== false,
+      };
+      const b = str(so.blend);
+      if (b && (BLEND_MODES as string[]).includes(b)) svg.blend = b as BlendMode;
+      slide.svg = svg;
+    }
   }
 
   // a slide with zero renderable content is unusable

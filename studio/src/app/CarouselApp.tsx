@@ -1,10 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useRef, useState, useCallback, useEffect, useMemo, useId, ReactNode, createContext, useContext } from "react";
 import { toPng, toJpeg } from "html-to-image";
 import type {
   SlideData, BgType, StylePreset, FontId, FontStyle, SurfaceId, Surface, AccentId, Accent,
   PurposeId, FormatId, CustomData, CustomFont, CustomSurface, CustomAccent, DecorLayer, BgImage, BlendMode,
+  SlideSvg, DecorOverride,
 } from "../lib/types";
 import { FONT_STYLES, SURFACES, ACCENTS, composePreset, FORMAT_PRESETS } from "../lib/presets";
 import { SLIDES, DEFAULT_FONT, DEFAULT_SURFACE, DEFAULT_ACCENT, DEFAULT_PURPOSE, DEFAULT_BG, DEFAULT_FORMAT } from "../slides";
@@ -12,7 +13,7 @@ import Customizer from "../components/Customizer";
 import CreatePanel from "../components/CreatePanel";
 import ContentEditor from "../components/ContentEditor";
 import SettingsPanel from "../components/SettingsPanel";
-import { loadCustomData, saveCustomData, registerFontFace, applyTypography, defaultData } from "../lib/custom";
+import { loadCustomData, saveCustomData, registerFontFace, applyTypography, defaultData, applySurfaceOverride, applyAccentOverride } from "../lib/custom";
 import type { PresetAxes, SavedPreset } from "../lib/custom";
 import { loadDraft, saveDraft, clearDraft } from "../lib/draft";
 import { loadSettings } from "../lib/ai";
@@ -30,20 +31,23 @@ function useDesign() { return useContext(DesignContext); }
 
 /** Resolve the CSS background for a slide container from a composed preset. */
 function bgStyle(preset: StylePreset): React.CSSProperties {
+  const base: React.CSSProperties = {
+    // isolation turns each slide into its own stacking context so the
+    // z-index:-1 per-slide SVG overlay paints above the surface but below text.
+    isolation: "isolate",
+  };
   if (preset.bgImage) {
-    const s: React.CSSProperties = {
+    return {
+      ...base,
       backgroundImage: `url(${preset.bgImage.url})`,
       backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundColor: preset.bgImage.tint ?? "transparent",
+      backgroundBlendMode: preset.bgImage.blend && preset.bgImage.blend !== "normal" ? preset.bgImage.blend : undefined,
     };
-    if (preset.bgImage.blend && preset.bgImage.blend !== "normal") {
-      s.backgroundBlendMode = preset.bgImage.blend;
-    }
-    return s;
   }
-  if (preset.bgGradient) return { background: preset.bgGradient };
-  return { background: preset.bg };
+  if (preset.bgGradient) return { ...base, background: preset.bgGradient };
+  return { ...base, background: preset.bg };
 }
 
 // ============================================================
@@ -67,8 +71,8 @@ function getAdaptiveFontSize(text: string, type: "hook" | "body"): number {
     else if (lines > 3) sizeByLines = 120;
     else if (lines > 2) sizeByLines = 144;
 
-    // Unbounded bold is wide (Cyrillic more so) — cap by longest explicit line
-    // so long words don't overflow 920px content area (1080 − 80×2 padding).
+    // Unbounded bold is wide (Cyrillic more so) â€” cap by longest explicit line
+    // so long words don't overflow 920px content area (1080 âˆ’ 80Ã—2 padding).
     let sizeByMaxLine = 170;
     if (lines > 1) {
       if (maxLineLen > 14) sizeByMaxLine = 88;
@@ -412,31 +416,91 @@ function GlowDecoration({
   );
 }
 
+/** Per-slide decorative SVG, placed in the slide background (below text). */
+function SlideSvgOverlay({ svg, preset }: { svg: SlideSvg; preset: StylePreset }) {
+  const { w: CANVAS_W, h: CANVAS_H } = useCanvasSize();
+  const uid = useId().replace(/[:]/g, "");
+  if (!svg.enabled || !svg.code) return null;
+
+  const color = svg.color || preset.highlightColor;
+  const size = Math.min(CANVAS_W, CANVAS_H) * 0.5 * svg.scale;
+  const sel = `ksvg-${uid}`;
+  const styleText =
+    `.${sel} svg{width:100%!important;height:100%!important;display:block;overflow:visible;background:transparent;}` +
+    (svg.recolor ? `.${sel} *{fill:${color}!important;stroke:${color}!important;}` : "");
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: `${svg.x}%`,
+        top: `${svg.y}%`,
+        width: size,
+        height: size,
+        transform: `translate(-50%, -50%) rotate(${svg.rotate ?? 0}deg)`,
+        opacity: svg.opacity,
+        mixBlendMode: svg.blend && svg.blend !== "normal" ? svg.blend : undefined,
+        pointerEvents: "none",
+        zIndex: -1,
+        color,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <style dangerouslySetInnerHTML={{ __html: styleText }} />
+      <div className={sel} dangerouslySetInnerHTML={{ __html: svg.code }} style={{ width: "100%", height: "100%" }} />
+    </div>
+  );
+}
+
 function renderBuiltInDecoration(
   bgType: BgType,
   slideIndex: number,
   preset: StylePreset,
-  colorOverride?: string
+  colorOverride?: string,
+  over?: DecorOverride
 ): ReactNode {
-  switch (bgType) {
-    case "blobs":
-      return <SlideDecorations slideIndex={slideIndex} preset={preset} colorOverride={colorOverride} />;
-    case "grid":
-      return <GridDecoration preset={preset} colorOverride={colorOverride} />;
-    case "lines":
-      return <LinesDecoration preset={preset} colorOverride={colorOverride} />;
-    case "paper":
-      return <PaperDecoration preset={preset} colorOverride={colorOverride} />;
-    case "noise":
-      return <NoiseDecoration slideIndex={slideIndex} />;
-    case "bignumber":
-      return <BigNumberDecoration slideIndex={slideIndex} preset={preset} colorOverride={colorOverride} />;
-    case "glow":
-      return <GlowDecoration slideIndex={slideIndex} preset={preset} colorOverride={colorOverride} />;
-    case "none":
-    default:
-      return null;
+  const inner = (() => {
+    switch (bgType) {
+      case "blobs":
+        return <SlideDecorations slideIndex={slideIndex} preset={preset} colorOverride={colorOverride} />;
+      case "grid":
+        return <GridDecoration preset={preset} colorOverride={colorOverride} />;
+      case "lines":
+        return <LinesDecoration preset={preset} colorOverride={colorOverride} />;
+      case "paper":
+        return <PaperDecoration preset={preset} colorOverride={colorOverride} />;
+      case "noise":
+        return <NoiseDecoration slideIndex={slideIndex} />;
+      case "bignumber":
+        return <BigNumberDecoration slideIndex={slideIndex} preset={preset} colorOverride={colorOverride} />;
+      case "glow":
+        return <GlowDecoration slideIndex={slideIndex} preset={preset} colorOverride={colorOverride} />;
+      case "none":
+      default:
+        return null;
+    }
+  })();
+  if (!inner) return null;
+  if (over && (over.opacity !== undefined || (over.size !== undefined && over.size !== 1))) {
+    return (
+      <DecorWrapper
+        layer={{
+          id: "__builtin",
+          type: bgType,
+          fillKind: "solid",
+          opacity: over.opacity ?? 1,
+          blend: "normal",
+          size: over.size ?? 1,
+          enabled: true,
+        }}
+      >
+        {inner}
+      </DecorWrapper>
+    );
   }
+  return inner;
 }
 
 /** Wrapper that applies a decor layer's blend / opacity / size to a full-canvas decoration. */
@@ -513,20 +577,24 @@ function SlideBackground({
   bgType,
   slideIndex,
   preset,
+  data,
 }: {
   bgType: BgType;
   slideIndex: number;
   preset: StylePreset;
+  data?: SlideData;
 }) {
   const design = useDesign();
+  const dOver = design.decorOverrides?.[bgType];
   return (
     <>
-      {renderBuiltInDecoration(bgType, slideIndex, preset)}
+      {renderBuiltInDecoration(bgType, slideIndex, preset, dOver?.color, dOver)}
       {design.decors
         .filter((d) => d.enabled)
         .map((layer) => (
           <DecorLayerView key={layer.id} layer={layer} slideIndex={slideIndex} preset={preset} />
         ))}
+      {data?.svg && <SlideSvgOverlay svg={data.svg} preset={preset} />}
     </>
   );
 }
@@ -569,7 +637,7 @@ function LogoOverlay({ index, total }: { index: number; total: number }) {
 }
 
 // ============================================================
-// HELPERS — badge, highlight, text balance
+// HELPERS â€” badge, highlight, text balance
 // ============================================================
 
 function renderWithHighlight(
@@ -596,7 +664,7 @@ function renderWithHighlight(
             fontWeight: 700,
             background: highlightColor,
             color: "#ffffff",
-            // no vertical padding — box matches line-box, horizontal breathing only
+            // no vertical padding â€” box matches line-box, horizontal breathing only
             padding: "0 0.22em",
             borderRadius: 6,
             textTransform: "none",
@@ -772,14 +840,14 @@ function SlideHook({
         boxSizing: "border-box",
       }}
     >
-      <SlideBackground bgType={bgType} slideIndex={index} preset={preset} />
+      <SlideBackground bgType={bgType} slideIndex={index} preset={preset} data={data} />
       {data.badge && <Badge text={data.badge} preset={preset} />}
       <div
         style={{
           fontSize: getAdaptiveFontSize(data.text || "", "hook"),
           fontWeight: 800,
           color: preset.textColor,
-          // 1.08 instead of 0.95 — tight but leaves room for italic-box highlight
+          // 1.08 instead of 0.95 â€” tight but leaves room for italic-box highlight
           // on the next line without the colored rect clipping into prev line
           lineHeight: data.highlightStyle === "italic-box" ? 1.15 : 1.02,
           whiteSpace: "pre-line",
@@ -940,6 +1008,7 @@ function SlideShell({
   index,
   total,
   bgType,
+  data,
   center,
 }: {
   children: ReactNode;
@@ -947,6 +1016,7 @@ function SlideShell({
   index: number;
   total: number;
   bgType: BgType;
+  data: SlideData;
   center?: boolean;
 }) {
   const { w: CANVAS_W, h: CANVAS_H } = useCanvasSize();
@@ -965,7 +1035,7 @@ function SlideShell({
         boxSizing: "border-box",
       }}
     >
-      <SlideBackground bgType={bgType} slideIndex={index} preset={preset} />
+      <SlideBackground bgType={bgType} slideIndex={index} preset={preset} data={data} />
       {children}
       <SlideCounter current={index} total={total} color={preset.accentColor} />
       <LogoOverlay index={index} total={total} />
@@ -988,7 +1058,7 @@ function SlideList({
 }) {
   const items = data.items || [];
   return (
-    <SlideShell preset={preset} index={index} total={total} bgType={bgType}>
+    <SlideShell preset={preset} index={index} total={total} bgType={bgType} data={data}>
       {data.badge && <Badge text={data.badge} preset={preset} />}
       {data.title && (
         <>
@@ -1053,7 +1123,7 @@ function SlideStats({
 }) {
   const stats = data.stats || [];
   return (
-    <SlideShell preset={preset} index={index} total={total} bgType={bgType}>
+    <SlideShell preset={preset} index={index} total={total} bgType={bgType} data={data}>
       {data.badge && <Badge text={data.badge} preset={preset} />}
       {data.title && (
         <>
@@ -1116,7 +1186,7 @@ function SlideQuote({
   bgType: BgType;
 }) {
   return (
-    <SlideShell preset={preset} index={index} total={total} bgType={bgType}>
+    <SlideShell preset={preset} index={index} total={total} bgType={bgType} data={data}>
       <div
         style={{
           fontFamily: preset.fontFamily,
@@ -1128,7 +1198,7 @@ function SlideQuote({
           position: "relative",
         }}
       >
-        “
+        â€œ
       </div>
       <div
         style={{
@@ -1156,7 +1226,7 @@ function SlideQuote({
             position: "relative",
           }}
         >
-          — {data.author}
+          â€” {data.author}
           {data.role && (
             <span
               style={{ color: preset.textSecondary, fontWeight: 400, marginLeft: 12 }}
@@ -1185,7 +1255,7 @@ function SlideChecklist({
 }) {
   const items = data.items || [];
   return (
-    <SlideShell preset={preset} index={index} total={total} bgType={bgType}>
+    <SlideShell preset={preset} index={index} total={total} bgType={bgType} data={data}>
       {data.badge && <Badge text={data.badge} preset={preset} />}
       {data.title && (
         <>
@@ -1219,7 +1289,7 @@ function SlideChecklist({
                 fontFamily: preset.fontFamily,
               }}
             >
-              ✓
+              âœ“
             </div>
             <div
               style={{
@@ -1255,7 +1325,7 @@ function SlideProcess({
 }) {
   const steps = data.steps || [];
   return (
-    <SlideShell preset={preset} index={index} total={total} bgType={bgType}>
+    <SlideShell preset={preset} index={index} total={total} bgType={bgType} data={data}>
       {data.badge && <Badge text={data.badge} preset={preset} />}
       {data.title && (
         <>
@@ -1359,7 +1429,7 @@ function SlideComparison({
   const labelSize = 40;
 
   return (
-    <SlideShell preset={preset} index={index} total={total} bgType={bgType}>
+    <SlideShell preset={preset} index={index} total={total} bgType={bgType} data={data}>
       {data.title && (
         <>
           <SlideTitle text={data.title} preset={preset} highlight={data.highlight} highlightStyle={data.highlightStyle} />
@@ -1406,7 +1476,7 @@ function SlideComparison({
                   lineHeight: 1.25,
                 }}
               >
-                · {item}
+                Â· {item}
               </div>
             ))}
           </div>
@@ -1430,7 +1500,7 @@ function SlideImage({
   bgType: BgType;
 }) {
   return (
-    <SlideShell preset={preset} index={index} total={total} bgType={bgType}>
+    <SlideShell preset={preset} index={index} total={total} bgType={bgType} data={data}>
       {data.badge && <Badge text={data.badge} preset={preset} />}
       {data.title && (
         <>
@@ -1500,7 +1570,7 @@ function SlideEmoji({
   bgType: BgType;
 }) {
   return (
-    <SlideShell preset={preset} index={index} total={total} bgType={bgType} center>
+    <SlideShell preset={preset} index={index} total={total} bgType={bgType} data={data} center>
       <div
         style={{
           flex: 1,
@@ -1518,7 +1588,7 @@ function SlideEmoji({
               fontSize: 360,
               lineHeight: 1,
               marginBottom: 48,
-              // deliberately no fontFamily — let OS emoji font render in color
+              // deliberately no fontFamily â€” let OS emoji font render in color
             }}
           >
             {data.emoji}
@@ -1578,7 +1648,7 @@ function SlideNumber({
   const num = data.bigNumber || "";
   const size = num.length <= 2 ? 560 : num.length <= 4 ? 420 : 320;
   return (
-    <SlideShell preset={preset} index={index} total={total} bgType={bgType} center>
+    <SlideShell preset={preset} index={index} total={total} bgType={bgType} data={data} center>
       {data.badge && <Badge text={data.badge} preset={preset} />}
       <div
         style={{
@@ -1778,7 +1848,7 @@ const T = {
     statusExport: (i: number, n: number) => `Exporting ${i}/${n}...`,
     statusPdf: (i: number, n: number) => `PDF ${i}/${n}...`,
     footer: (w: number, h: number, n: number) =>
-      `${w}×${h}px — ${n} slides — Click a slide to export individually`,
+      `${w}Ã—${h}px â€” ${n} slides â€” Click a slide to export individually`,
     modes: { carousel: "Carousel", presentation: "Presentation" } as Record<PurposeId, string>,
     bgs: {
       none: "None", blobs: "Blobs", grid: "Grid", lines: "Lines",
@@ -1796,32 +1866,32 @@ const T = {
   },
   ru: {
     appTitle: "Threads Carousel",
-    rowFont: "Шрифт",
-    rowSurface: "Фон",
-    rowAccent: "Акцент",
-    rowBg: "Декор",
-    rowMode: "Режим",
-    rowFormat: "Формат",
+    rowFont: "Ð¨Ñ€Ð¸Ñ„Ñ‚",
+    rowSurface: "Ð¤Ð¾Ð½",
+    rowAccent: "ÐÐºÑ†ÐµÐ½Ñ‚",
+    rowBg: "Ð”ÐµÐºÐ¾Ñ€",
+    rowMode: "Ð ÐµÐ¶Ð¸Ð¼",
+    rowFormat: "Ð¤Ð¾Ñ€Ð¼Ð°Ñ‚",
     btnPdf: "PDF",
     btnAll: "PNG",
-    statusDone: "Готово!",
-    statusExport: (i: number, n: number) => `Экспорт ${i}/${n}...`,
+    statusDone: "Ð“Ð¾Ñ‚Ð¾Ð²Ð¾!",
+    statusExport: (i: number, n: number) => `Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ ${i}/${n}...`,
     statusPdf: (i: number, n: number) => `PDF ${i}/${n}...`,
     footer: (w: number, h: number, n: number) =>
-      `${w}×${h}px — ${n} слайдов — Нажми на слайд для экспорта`,
-    modes: { carousel: "Карусель", presentation: "Презентация" } as Record<PurposeId, string>,
+      `${w}Ã—${h}px â€” ${n} ÑÐ»Ð°Ð¹Ð´Ð¾Ð² â€” ÐÐ°Ð¶Ð¼Ð¸ Ð½Ð° ÑÐ»Ð°Ð¹Ð´ Ð´Ð»Ñ ÑÐºÑÐ¿Ð¾Ñ€Ñ‚Ð°`,
+    modes: { carousel: "ÐšÐ°Ñ€ÑƒÑÐµÐ»ÑŒ", presentation: "ÐŸÑ€ÐµÐ·ÐµÐ½Ñ‚Ð°Ñ†Ð¸Ñ" } as Record<PurposeId, string>,
     bgs: {
-      none: "Нет", blobs: "Пятна", grid: "Сетка", lines: "Линии",
-      noise: "Шум", bignumber: "Номер", glow: "Свечение", paper: "Линейка",
+      none: "ÐÐµÑ‚", blobs: "ÐŸÑÑ‚Ð½Ð°", grid: "Ð¡ÐµÑ‚ÐºÐ°", lines: "Ð›Ð¸Ð½Ð¸Ð¸",
+      noise: "Ð¨ÑƒÐ¼", bignumber: "ÐÐ¾Ð¼ÐµÑ€", glow: "Ð¡Ð²ÐµÑ‡ÐµÐ½Ð¸Ðµ", paper: "Ð›Ð¸Ð½ÐµÐ¹ÐºÐ°",
     } as Record<BgType, string>,
     surfaces: {
-      dark: "Тёмный", white: "Белый", light: "Светлый", paper: "Бумага",
-      gradient: "Градиент", pastel: "Пастель", neon: "Неон", ember: "Уголь",
+      dark: "Ð¢Ñ‘Ð¼Ð½Ñ‹Ð¹", white: "Ð‘ÐµÐ»Ñ‹Ð¹", light: "Ð¡Ð²ÐµÑ‚Ð»Ñ‹Ð¹", paper: "Ð‘ÑƒÐ¼Ð°Ð³Ð°",
+      gradient: "Ð“Ñ€Ð°Ð´Ð¸ÐµÐ½Ñ‚", pastel: "ÐŸÐ°ÑÑ‚ÐµÐ»ÑŒ", neon: "ÐÐµÐ¾Ð½", ember: "Ð£Ð³Ð¾Ð»ÑŒ",
     } as Record<SurfaceId, string>,
     accents: {
-      yellow: "Жёлтый", red: "Красный", teal: "Бирюза", coral: "Коралл",
-      orange: "Оранж", violet: "Фиолет", lime: "Лайм", blue: "Синий",
-      fuchsia: "Фуксия", pink: "Розовый", amber: "Янтарь",
+      yellow: "Ð–Ñ‘Ð»Ñ‚Ñ‹Ð¹", red: "ÐšÑ€Ð°ÑÐ½Ñ‹Ð¹", teal: "Ð‘Ð¸Ñ€ÑŽÐ·Ð°", coral: "ÐšÐ¾Ñ€Ð°Ð»Ð»",
+      orange: "ÐžÑ€Ð°Ð½Ð¶", violet: "Ð¤Ð¸Ð¾Ð»ÐµÑ‚", lime: "Ð›Ð°Ð¹Ð¼", blue: "Ð¡Ð¸Ð½Ð¸Ð¹",
+      fuchsia: "Ð¤ÑƒÐºÑÐ¸Ñ", pink: "Ð Ð¾Ð·Ð¾Ð²Ñ‹Ð¹", amber: "Ð¯Ð½Ñ‚Ð°Ñ€ÑŒ",
     } as Record<AccentId, string>,
   },
 } as const;
@@ -1884,7 +1954,9 @@ export default function CarouselPage() {
     ),
   ];
   const surfaceOptions: Surface[] = [
-    ...Object.values(SURFACES),
+    ...Object.values(SURFACES)
+      .filter((s) => !customData.surfaceOverrides?.[s.id]?.hidden)
+      .map((s) => applySurfaceOverride(s, customData.surfaceOverrides?.[s.id])),
     ...customData.surfaces.map((s: CustomSurface): Surface => {
       const base = {
         id: s.id,
@@ -1907,7 +1979,9 @@ export default function CarouselPage() {
     }),
   ];
   const accentOptions: Accent[] = [
-    ...Object.values(ACCENTS),
+    ...Object.values(ACCENTS)
+      .filter((a) => !customData.accentOverrides?.[a.id]?.hidden)
+      .map((a) => applyAccentOverride(a, customData.accentOverrides?.[a.id])),
     ...customData.accents.map((a): Accent => ({ id: a.id, name: a.name, color: a.color })),
   ];
 
@@ -2113,7 +2187,7 @@ export default function CarouselPage() {
               lineHeight: 1,
             }}
           >
-            ⚙
+            âš™
           </button>
         </div>
       </div>
@@ -2128,17 +2202,17 @@ export default function CarouselPage() {
         />
       )}
 
-      {/* Tab 1 — Create */}
+      {/* Tab 1 â€” Create */}
       {activeTab === "create" && (
         <CreatePanel lang={lang} settings={settings} onLogo={applyLogo} onGenerated={handleGenerated} />
       )}
 
-      {/* Tab 2 — Content */}
+      {/* Tab 2 â€” Content */}
       {activeTab === "content" && (
         <ContentEditor lang={lang} slides={slides} onChange={setSlides} onReset={resetDraft} />
       )}
 
-      {/* Tab 3 — Customize & Export */}
+      {/* Tab 3 â€” Customize & Export */}
       {activeTab === "export" && (
         <>
         {/* Export actions row */}
@@ -2158,10 +2232,10 @@ export default function CarouselPage() {
               fontWeight: 700,
             }}
           >
-            🎛 {UI[lang].preview}
+            ðŸŽ› {UI[lang].preview}
           </button>
           <div style={{ fontSize: 12, color: "#666" }}>
-            {FORMAT_PRESETS[formatId].name} — {canvasW}×{canvasH}
+            {FORMAT_PRESETS[formatId].name} â€” {canvasW}Ã—{canvasH}
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button onClick={exportPdf} disabled={exporting} style={{ padding: "8px 20px", minWidth: 120, minHeight: 36, borderRadius: 8, border: "none", background: exporting ? "#444" : "#6366F1", color: "#fff", cursor: exporting ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums" }} className="tb-btn">
@@ -2180,8 +2254,8 @@ export default function CarouselPage() {
 
         {/* Toolbar */}
         <div style={{ marginBottom: 32 }}>
-          {/* 5-row axis toolbar — order: Format → Mode → Font → Color → Background */}
-          {/* key={lang} causes remount → tbFadeIn animation plays on language switch */}
+          {/* 5-row axis toolbar â€” order: Format â†’ Mode â†’ Font â†’ Color â†’ Background */}
+          {/* key={lang} causes remount â†’ tbFadeIn animation plays on language switch */}
           <div key={lang} className="tb-lang-fade" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
             {/* Format */}
@@ -2264,7 +2338,9 @@ export default function CarouselPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 11, color: "#666", width: 90, flexShrink: 0 }}>{t.rowBg}</span>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {(["none", "blobs", "grid", "lines", "paper", "noise", "bignumber", "glow"] as BgType[]).map((bg) => (
+                {(["none", "blobs", "grid", "lines", "paper", "noise", "bignumber", "glow"] as BgType[])
+                  .filter((bg) => bg === "none" || customData.decorOverrides?.[bg]?.enabled !== false)
+                  .map((bg) => (
                   <button key={bg} onClick={() => setBgType(bg)} style={{ padding: "9px 12px", minHeight: 36, borderRadius: 8, border: bgType === bg ? "2px solid #22C55E" : "1px solid #333", background: bgType === bg ? "#22C55E" : "transparent", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 500 }} className="tb-btn">
                     {t.bgs[bg]}
                   </button>
@@ -2307,13 +2383,13 @@ export default function CarouselPage() {
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {i + 1}/{slides.length} — {slide.type}
+                {i + 1}/{slides.length} â€” {slide.type}
               </div>
             </div>
           ))}
         </div>
 
-        {/* Offscreen slides for export — always rendered at (0,0), invisible via opacity */}
+        {/* Offscreen slides for export â€” always rendered at (0,0), invisible via opacity */}
         {slides.map((slide, i) => (
           <div
             key={`export-${i}`}
