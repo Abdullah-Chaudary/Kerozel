@@ -27,6 +27,15 @@ export const SLIDES: SlideData[] = [
     type: "hook",
     text: "7 AI workflows\nthat save you\nhours every week",
     highlight: "7 AI workflows",
+    svg: {
+      code: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="36" fill="none" stroke="currentColor" stroke-width="8"/><path d="M50 26 V50 L66 60" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      x: 86,
+      y: 80,
+      scale: 0.45,
+      opacity: 0.35,
+      recolor: true,
+      enabled: true,
+    },
   },
   {
     type: "body",
@@ -148,6 +157,15 @@ export const SLIDES: SlideData[] = [
       { value: "240+ hrs", label: "reclaimed per year with AI assistance" },
       { value: "90%", label: "less time on repetitive content" },
     ],
+    svg: {
+      code: '<svg viewBox="0 0 100 100"><path d="M10 84 L42 52 L60 66 L90 22" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><path d="M68 22 H90 V44" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      x: 86,
+      y: 80,
+      scale: 0.45,
+      opacity: 0.35,
+      recolor: true,
+      enabled: true,
+    },
   },
   {
     type: "checklist",
@@ -159,11 +177,29 @@ export const SLIDES: SlideData[] = [
       "Measure the hours you get back",
       "Scale to the next workflow",
     ],
+    svg: {
+      code: '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="36" fill="none" stroke="currentColor" stroke-width="8"/><path d="M34 52 l11 11 22-24" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      x: 86,
+      y: 80,
+      scale: 0.45,
+      opacity: 0.35,
+      recolor: true,
+      enabled: true,
+    },
   },
   {
     type: "cta",
     text: "Automate the busywork.\nKeep the thinking.",
     handle: "@yourhandle",
+    svg: {
+      code: '<svg viewBox="0 0 100 100"><path d="M58 8 L24 56 h22 l-6 36 38-50 H54 Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+      x: 86,
+      y: 80,
+      scale: 0.45,
+      opacity: 0.35,
+      recolor: true,
+      enabled: true,
+    },
   },
 ];
 

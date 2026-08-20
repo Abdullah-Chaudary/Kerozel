@@ -1884,6 +1884,7 @@ export default function CarouselPage() {
   const [exporting, setExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
   const [showCustomizer, setShowCustomizer] = useState(true);
+  const [showRightPanel, setShowRightPanel] = useState(true);
   const offscreenRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // ---- custom assets (fonts / surfaces / accents / decors / logo / typography) ----
@@ -2061,7 +2062,7 @@ export default function CarouselPage() {
 
   const handleGenerated = useCallback((s: SlideData[]) => {
     setSlides(s);
-    setActiveTab("content");
+    setActiveTab("export");
   }, []);
 
   const resetDraft = useCallback(() => {
@@ -2085,7 +2086,6 @@ export default function CarouselPage() {
           {(
             [
               ["create", UI.tabCreate],
-              ["content", UI.tabContent],
               ["export", UI.tabExport],
             ] as const
           ).map(([id, label]) => (
@@ -2146,35 +2146,13 @@ export default function CarouselPage() {
         <CreatePanel settings={settings} onLogo={applyLogo} onGenerated={handleGenerated} />
       )}
 
-      {/* Tab 2 â€” Content */}
-      {activeTab === "content" && (
-        <ContentEditor slides={slides} onChange={setSlides} onReset={resetDraft} />
-      )}
-
-      {/* Tab 3 â€” Customize & Export */}
+      {/* Tab 3 — Customize & Export: workspace */}
       {activeTab === "export" && (
         <>
         {/* Export actions row */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-          <button
-            onClick={() => setShowCustomizer((v) => !v)}
-            className="tb-btn"
-            style={{
-              padding: "8px 16px",
-              minHeight: 36,
-              borderRadius: 8,
-              border: showCustomizer ? "2px solid #A78BFA" : "1px solid #333",
-              background: showCustomizer ? "#A78BFA" : "transparent",
-              color: showCustomizer ? "#000" : "#bbb",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
-            ðŸŽ› {UI.preview}
-          </button>
           <div style={{ fontSize: 12, color: "#666" }}>
-            {FORMAT_PRESETS[formatId].name} â€” {canvasW}Ã—{canvasH}
+            {FORMAT_PRESETS[formatId].name} — {canvasW}×{canvasH}
           </div>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button onClick={exportPdf} disabled={exporting} style={{ padding: "8px 20px", minWidth: 120, minHeight: 36, borderRadius: 8, border: "none", background: exporting ? "#444" : "#6366F1", color: "#fff", cursor: exporting ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums" }} className="tb-btn">
@@ -2184,13 +2162,26 @@ export default function CarouselPage() {
               {exporting ? exportStatus : t.btnAll}
             </button>
           </div>
-        </div>
+          </div>
 
-        {/* Customizer panel */}
-        {showCustomizer && (
-          <Customizer data={customData} onChange={setCustomData} axes={axes} onApply={applyPreset} />
-        )}
+        {/* Workspace: left customize — center preview — right content */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
 
+          {/* LEFT — customization panel */}
+          {showCustomizer ? (
+            <aside style={{ width: 340, flexShrink: 0, borderRight: "1px solid #2a2a31", paddingRight: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: "#bbb", letterSpacing: "0.08em", textTransform: "uppercase" }}>Customize</span>
+                <button
+                  onClick={() => setShowCustomizer(false)}
+                  title="Hide customization panel"
+                  style={{ marginLeft: "auto", padding: "6px 10px", minHeight: 28, borderRadius: 6, border: "1px solid #333", background: "transparent", color: "#bbb", cursor: "pointer", fontSize: 12, fontWeight: 700 }}
+                  className="tb-btn"
+                >
+                  «
+                </button>
+              </div>
+              <div style={{ maxHeight: "calc(100vh - 200px)", overflowY: "auto", paddingRight: 4 }}>
         {/* Toolbar */}
         <div style={{ marginBottom: 32 }}>
           {/* 5-row axis toolbar â€” order: Format â†’ Mode â†’ Font â†’ Color â†’ Background */}
@@ -2288,7 +2279,23 @@ export default function CarouselPage() {
 
           </div>
         </div>
+                <div style={{ marginTop: 20 }} />
+                <Customizer data={customData} onChange={setCustomData} axes={axes} onApply={applyPreset} />
+              </div>
+            </aside>
+          ) : (
+            <button
+              onClick={() => setShowCustomizer(true)}
+              title="Show customization panel"
+              style={{ writingMode: "vertical-rl", flexShrink: 0, padding: "18px 8px", borderRadius: 8, border: "1px solid #333", background: "#1a1a20", color: "#bbb", cursor: "pointer", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em" }}
+              className="tb-btn"
+            >
+              Customize
+            </button>
+          )}
 
+          {/* CENTER — live preview */}
+          <main style={{ flex: 1, minWidth: 0 }}>
         {/* Preview Grid */}
         <div
           style={{
@@ -2326,7 +2333,6 @@ export default function CarouselPage() {
             </div>
           ))}
         </div>
-
         {/* Offscreen slides for export â€” always rendered at (0,0), invisible via opacity */}
         {slides.map((slide, i) => (
           <div
@@ -2349,8 +2355,6 @@ export default function CarouselPage() {
             <Slide data={slide} preset={preset} index={i} total={slides.length} bgType={bgType} />
           </div>
         ))}
-
-        {/* Info */}
         <div
           style={{
             marginTop: 32,
@@ -2360,6 +2364,37 @@ export default function CarouselPage() {
           }}
         >
           {t.footer(canvasW, canvasH, slides.length)}
+        </div>
+          </main>
+
+          {/* RIGHT — content panel */}
+          {showRightPanel ? (
+            <aside style={{ width: 370, flexShrink: 0, borderLeft: "1px solid #2a2a31", paddingLeft: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: "#bbb", letterSpacing: "0.08em", textTransform: "uppercase" }}>Content</span>
+                <button
+                  onClick={() => setShowRightPanel(false)}
+                  title="Hide content panel"
+                  style={{ marginLeft: "auto", padding: "6px 10px", minHeight: 28, borderRadius: 6, border: "1px solid #333", background: "transparent", color: "#bbb", cursor: "pointer", fontSize: 12, fontWeight: 700 }}
+                  className="tb-btn"
+                >
+                  »
+                </button>
+              </div>
+              <div style={{ maxHeight: "calc(100vh - 200px)", overflowY: "auto", paddingRight: 4 }}>
+                <ContentEditor slides={slides} onChange={setSlides} onReset={resetDraft} />
+              </div>
+            </aside>
+          ) : (
+            <button
+              onClick={() => setShowRightPanel(true)}
+              title="Show content panel"
+              style={{ writingMode: "vertical-lr", flexShrink: 0, padding: "18px 8px", borderRadius: 8, border: "1px solid #333", background: "#1a1a20", color: "#bbb", cursor: "pointer", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em" }}
+              className="tb-btn"
+            >
+              Content
+            </button>
+          )}
         </div>
         </>
       )}
